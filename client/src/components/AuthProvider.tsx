@@ -2,7 +2,8 @@
 
 import { useEffect, useState, createContext, type ReactNode, useContext } from 'react';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
-import { type Database } from '@/types/database';
+import type { Database } from '@/types/database';
+import { supabase as browserSupabase } from '@/lib/supabase/client';
 
 // Type for the session - simplified to avoid Supabase type conflicts
 type Session = {
@@ -28,12 +29,8 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 // AuthProvider component
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [supabase, setSupabase] = useState<SupabaseClient>(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !anonKey) {
-      throw new Error('Missing Supabase environment variables');
-    }
-    return createClient<Database>(url, anonKey);
+    // Use the shared browser client from client.ts to avoid multiple GoTrueClient instances
+    return browserSupabase;
   });
 
   const [session, setSession] = useState<Session | null>(null);

@@ -83,14 +83,13 @@ export default function LoginPage() {
 
     const { username, email } = formData;
 
-    // Determine credentials: if username provided, we need to look up email
-    let emailToUse = email;
+    // Determine credentials: if username provided, we need to look up email    let emailToUse = email;
     let loginError = '';
 
     if (!emailToUse && username) {
-      // Try to resolve username to email via server endpoint
+      // Try to resolve username to email via server endpoint (relative path)
       try {
-        const resolveRes = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/auth/resolve-username`, {
+        const resolveRes = await fetch('/api/auth/resolve-username', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
