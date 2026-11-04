@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import { WebSocketServer } from "ws";
 import signinHandler from "./api/auth/signin/route.js";
 import signupHandler from "./api/auth/signup/route.js";
+import conversationsHandler from "./api/conversations/route.js";
+import messagesHandler from "./api/messages/route.js";
 import * as responseHandler from "#utils/responseHandler.js";
 dotenv.config();
 
@@ -33,24 +35,27 @@ const server = http.createServer(async (req, res) => {
   }
 
   console.log(req.method, req.url);
+
+  const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   let output = null;
   try {
     // Auth routes
-    if (req.method === "POST" && req.url === "/api/auth/signin") {
+    if (req.method === "POST" && pathname === "/api/auth/signin") {
       output = await signinHandler(req, res);
-    } else if (req.method === "POST" && req.url === "/api/auth/signup") {
+    } else if (req.method === "POST" && pathname === "/api/auth/signup") {
       output = await signupHandler(req, res);
+    } else if (req.method === "GET" && pathname === "/api/conversations") {
+      output = await conversationsHandler(req, res);
+    } else if (
+      (req.method === "GET" || req.method === "POST") &&
+      pathname === "/api/messages"
+    ) {
+      output = await messagesHandler(req, res);
     } else {
       responseHandler.notFoundResponse(res, "Route not found");
       return;
     }
 
-    // Existing routes
-    // if (req.method === "POST" && req.url === "/api/request-connection") {
-    //   const createConnectionRequest = require("./services/getUserService.js").default;
-    //   createConnectionRequest(req, res);
-    //   return;
-    // }
     responseHandler.successResponse(res, output);
   } catch (error) {
     console.log(error);

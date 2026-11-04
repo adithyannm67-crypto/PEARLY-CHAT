@@ -4,6 +4,7 @@ import React, { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
+import { useSupabase } from "@/components/AuthProvider";
 import {
   User,
   Lock,
@@ -14,6 +15,7 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { supabase } = useSupabase();
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -75,12 +77,27 @@ export default function LoginPage() {
         return;
       }
 
-      // Authentication successful - session managed by external server
+      // Keep the Supabase browser session in sync so the dashboard can
+      // use the authenticated user's id when fetching data.
+      const sessionData = data?.data?.session ?? data?.session;
+
+      if (sessionData?.access_token && sessionData?.refresh_token) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: sessionData.access_token,
+          refresh_token: sessionData.refresh_token,
+        });
+
+        if (sessionError) {
+          setError("Could not start your session. Please try again.");
+          return;
+        }
+      }
+
       // rememberMe is retained as UI state
       void rememberMe;
 
       router.push("/dashboard");
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
     } finally {
       setIsLoading(false);
@@ -203,7 +220,7 @@ export default function LoginPage() {
           {/* Signup navigation */}
           <div className="mt-6 text-center">
             <span className="text-sm text-text-secondary">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
             </span>
 
             <Link

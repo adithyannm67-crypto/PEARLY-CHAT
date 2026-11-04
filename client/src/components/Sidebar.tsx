@@ -3,14 +3,13 @@
 import { useState } from 'react';
 import { SquarePen, Settings, Search } from 'lucide-react';
 import Avatar from '@/components/Avatar';
-import {
-  currentUser,
-  conversations,
-  getOtherParticipant,
-  Conversation,
-} from '@/lib/mockData';
+import type { ChatUser, Conversation } from '@/types/chat';
 
 interface SidebarProps {
+  currentUser: ChatUser | null;
+  conversations: Conversation[];
+  loading: boolean;
+  error: string;
   selectedConversationId: string | null;
   onSelectConversation: (id: string) => void;
 }
@@ -53,13 +52,17 @@ function formatTime(timestamp: string): string {
 }
 
 export default function Sidebar({
+  currentUser,
+  conversations,
+  loading,
+  error,
   selectedConversationId,
   onSelectConversation,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const filteredConversations = conversations.filter((conversation: Conversation) => {
-    const otherUser = getOtherParticipant(conversation);
+  const filteredConversations = conversations.filter((conversation) => {
+    const otherUser = conversation.otherUser;
     if (!otherUser) return false;
     return (
       otherUser.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -74,7 +77,7 @@ export default function Sidebar({
         {/* Left side */}
         <div className="flex items-center gap-3">
           <Avatar
-            initials={currentUser.avatar}
+            initials={currentUser?.avatar ?? '?'}
             size="sm"
             showOnline
           />
@@ -119,11 +122,22 @@ export default function Sidebar({
 
       {/* 3. Conversation list */}
       <div className="flex-1 overflow-y-auto">
-        {filteredConversations.map((conversation) => {
-          const otherUser = getOtherParticipant(conversation);
+        {loading && (
+          <div className="p-6 text-center text-sm text-text-secondary">
+            Loading conversations...
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="p-6 text-center text-sm text-error">{error}</div>
+        )}
+
+        {!loading && !error && filteredConversations.map((conversation) => {
+          const otherUser = conversation.otherUser;
           if (!otherUser) return null;
 
           const isSelected = conversation.id === selectedConversationId;
+          const preview = conversation.lastMessage || 'No messages yet';
 
           return (
             <button
@@ -152,7 +166,7 @@ export default function Sidebar({
                 </div>
                 <div className="flex items-center justify-between mt-0.5">
                   <p className="text-xs text-text-secondary truncate">
-                    {conversation.lastMessage.slice(0, 45)}
+                    {preview.slice(0, 45)}
                   </p>
                   {conversation.unreadCount > 0 && (
                     <span className="min-w-[20px] h-5 rounded-full bg-primary text-white text-[10px] flex items-center justify-center font-medium px-1.5 shrink-0 ml-2">
@@ -165,7 +179,7 @@ export default function Sidebar({
           );
         })}
 
-        {filteredConversations.length === 0 && (
+        {!loading && !error && filteredConversations.length === 0 && (
           <div className="p-6 text-center text-sm text-text-secondary">
             No conversations found
           </div>

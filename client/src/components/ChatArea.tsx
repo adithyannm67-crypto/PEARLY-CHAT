@@ -12,15 +12,11 @@ import {
   SendHorizontal,
 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
-import {
-  conversations,
-  getConversationMessages,
-  getOtherParticipant,
-  Message,
-} from '@/lib/mockData';
+import type { Conversation, Message } from '@/types/chat';
 
 interface ChatAreaProps {
-  conversationId: string | null;
+  currentUserId: string | null;
+  conversation: Conversation | null;
   onBack?: () => void;
 }
 
@@ -63,19 +59,56 @@ function formatMessageTime(ts: string): string {
   });
 }
 
-export default function ChatArea({ conversationId, onBack }: ChatAreaProps) {
+export default function ChatArea({ currentUserId, conversation, onBack }: ChatAreaProps) {
   const [messageInput, setMessageInput] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // When conversationId changes, set localMessages
+  const conversationId = conversation?.id ?? null;
+
+  // When conversationId changes, fetch messages from the Next.js API
   useEffect(() => {
-    if (conversationId) {
-      setLocalMessages(getConversationMessages(conversationId));
-    } else {
-      setLocalMessages([]);
+    if (!conversationId) return;
+
+    let cancelled = false;
+
+    async function loadMessages() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await fetch(
+          `/api/messages?conversationId=${encodeURIComponent(conversationId!)}`,
+          { cache: 'no-store' }
+        );
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to load messages');
+        }
+
+        if (!cancelled) {
+          setLocalMessages(data.data?.messages ?? []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load messages');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
-    setMessageInput('');
+
+    loadMessages();
+
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId]);
 
   // Scroll to bottom when localMessages changes
@@ -83,29 +116,41 @@ export default function ChatArea({ conversationId, onBack }: ChatAreaProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [localMessages]);
 
-  const conversation = conversationId
-    ? conversations.find((c) => c.id === conversationId)
-    : undefined;
-  const otherUser = conversation ? getOtherParticipant(conversation) : undefined;
+  const otherUser = conversation?.otherUser ?? null;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = messageInput.trim();
-    if (!trimmed || !conversationId) return;
+    if (!trimmed || !conversationId || !currentUserId || sending) return;
 
-    const newMsg: Message = {
-      id: `msg-${Date.now()}`,
-      conversationId: conversationId,
-      senderId: 'user-0',
-      content: trimmed,
-      timestamp: new Date().toISOString(),
-      status: 'sent' as const,
-    };
+    setSending(true);
+    setError('');
 
-    setLocalMessages((prev) => [...prev, newMsg]);
-    setMessageInput('');
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationId,
+          senderId: currentUserId,
+          content: trimmed,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send message');
+      }
+
+      setLocalMessages((prev) => [...prev, data.data.message]);
+      setMessageInput('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send message');
+    } finally {
+      setSending(false);
+    }
   };
 
-  // Empty State (when conversationId is null)
+  // Empty State (when no conversation is selected)
   if (!conversationId || !conversation || !otherUser) {
     return (
       <div className="flex-1 flex items-center justify-center bg-bg-main h-full">
@@ -159,7 +204,7 @@ export default function ChatArea({ conversationId, onBack }: ChatAreaProps) {
             )}
             {otherUser.status === 'offline' && (
               <span className="text-text-secondary">
-                Last seen {otherUser.lastSeen}
+                {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
               </span>
             )}
           </p>
@@ -193,13 +238,29 @@ export default function ChatArea({ conversationId, onBack }: ChatAreaProps) {
 
       {/* 2. Message area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-1">
+        {loading && (
+          <div className="text-center text-sm text-text-secondary py-4">
+            Loading messages...
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="text-center text-sm text-error py-4">{error}</div>
+        )}
+
+        {!loading && !error && localMessages.length === 0 && (
+          <div className="text-center text-sm text-text-secondary py-4">
+            No messages yet. Say hello!
+          </div>
+        )}
+
         {localMessages.map((msg, index) => {
           const dateKey = getDateKey(msg.timestamp);
           const prevDateKey =
             index > 0 ? getDateKey(localMessages[index - 1].timestamp) : null;
           const showDateSeparator = dateKey !== prevDateKey;
 
-          const isSent = msg.senderId === 'user-0';
+          const isSent = msg.senderId === currentUserId;
           const prevMsg = index > 0 ? localMessages[index - 1] : null;
           const isFirstInGroup =
             showDateSeparator || !prevMsg || prevMsg.senderId !== msg.senderId;
@@ -307,10 +368,10 @@ export default function ChatArea({ conversationId, onBack }: ChatAreaProps) {
           {/* Send button */}
           <button
             type="submit"
-            disabled={!messageInput.trim()}
+            disabled={!messageInput.trim() || sending || !currentUserId}
             aria-label="Send message"
             className={`p-2.5 rounded-full transition-all ${
-              messageInput.trim()
+              messageInput.trim() && !sending && currentUserId
                 ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
                 : 'bg-surface text-text-secondary cursor-not-allowed'
             }`}
