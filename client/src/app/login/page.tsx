@@ -83,7 +83,8 @@ export default function LoginPage() {
 
     const { username, email } = formData;
 
-    // Determine credentials: if username provided, we need to look up email    let emailToUse = email;
+    // Determine credentials: if username provided, we need to look up email
+    let emailToUse = email;
     let loginError = '';
 
     if (!emailToUse && username) {
@@ -468,6 +469,7 @@ export default function LoginPage() {
                 </span>
               </div>
             )}
+            {isLogin && errors.login && <p className="text-error text-sm mt-2 ">{errors.login}</p>}
 
             {/* Action button */}
             <button
@@ -514,4 +516,4 @@ export default function LoginPage() {
       </footer>
     </div>
   );
-}
+}
