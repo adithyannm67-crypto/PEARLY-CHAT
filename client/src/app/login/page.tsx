@@ -116,6 +116,7 @@ export default function LoginPage() {
     setIsLoading(true);
 
     if (isLogin) {
+      alert(`Welcome back, ${formData.username}!`);
       setTimeout(() => {
         router.push('/');
       }, 1200);
