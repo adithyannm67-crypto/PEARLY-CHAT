@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import ChatArea from "@/components/ChatArea";
 
 export default function Dashboard() {
+  throw new Error("Dashboard page is not implemented yet.");
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
