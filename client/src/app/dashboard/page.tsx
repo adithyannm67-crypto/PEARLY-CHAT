@@ -7,6 +7,17 @@ import ChatArea from '@/components/ChatArea';
 import { useSupabase } from '@/components/AuthProvider';
 import type { ChatUser, Conversation } from '@/types/chat';
 
+function getInitials(value: string): string {
+  const source = value.trim();
+  const parts = source.split(/\s+/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+
+  return source.slice(0, 2).toUpperCase();
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const { session, signOut } = useSupabase();
@@ -75,8 +86,39 @@ export default function Dashboard() {
     router.push('/auth/login');
   };
 
+  const handleConversationCreated = (conversation: Conversation) => {
+    setConversations((prev) => [
+      conversation,
+      ...prev.filter((item) => item.id !== conversation.id),
+    ]);
+    setSelectedConversationId(conversation.id);
+    setShowChat(true);
+  };
+
+  const handleUserUpdated = (user: ChatUser) => {
+    setCurrentUser(user);
+  };
+
+  const sessionUser = session?.user;
+  const sessionName =
+    (sessionUser?.user_metadata?.name as string | undefined) ||
+    (sessionUser?.user_metadata?.username as string | undefined) ||
+    sessionUser?.email ||
+    'You';
+  const fallbackUser: ChatUser | null = userId
+    ? {
+        id: userId,
+        name: sessionName,
+        username: (sessionUser?.user_metadata?.username as string | undefined) || '',
+        email: sessionUser?.email || '',
+        avatar: getInitials(sessionName),
+        status: 'online',
+        lastSeen: '',
+      }
+    : null;
+
   const displayConversations = userId ? conversations : [];
-  const displayCurrentUser = userId ? currentUser : null;
+  const displayCurrentUser = userId ? currentUser ?? fallbackUser : null;
   const displayLoading = userId ? loading : false;
   const displayError = userId ? error : 'Please sign in to view your conversations.';
 
@@ -99,6 +141,8 @@ export default function Dashboard() {
             error={displayError}
             selectedConversationId={selectedConversationId}
             onSelectConversation={handleSelectConversation}
+            onConversationCreated={handleConversationCreated}
+            onUserUpdated={handleUserUpdated}
             onLogout={handleLogout}
           />
         </div>

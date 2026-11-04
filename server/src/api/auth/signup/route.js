@@ -51,10 +51,12 @@ export default async function handler(req, res) {
     throw new Error(errorMessage);
   }
 
-  // Return success - user needs to confirm email
+  // If email confirmation is disabled Supabase returns a session, which
+  // lets the client establish a browser session immediately.
   return {
     success: true,
     message: "Signup successful!",
     user: data.user,
+    session: data.session,
   };
 };

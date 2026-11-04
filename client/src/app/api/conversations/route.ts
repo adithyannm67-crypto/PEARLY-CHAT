@@ -32,3 +32,24 @@ export async function GET(request: Request) {
     );
   }
 }
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.text();
+    const response = await fetch(`${SERVER_URL}/api/conversations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+      cache: "no-store",
+    });
+    const data = await response.json();
+
+    return NextResponse.json(data, { status: response.status });
+  } catch (error) {
+    console.error("Failed to create conversation:", error);
+    return NextResponse.json(
+      { success: false, error: "Failed to reach chat server" },
+      { status: 502 },
+    );
+  }
+}

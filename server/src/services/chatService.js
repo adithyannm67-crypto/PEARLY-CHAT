@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import supabase from "../config/supabase.js";
 
 const USER_COLUMNS = "id, email, username, avatar_url, full_name, created_at";
@@ -147,4 +148,110 @@ export async function createMessage({ conversationId, senderId, content }) {
 
   if (error) throw error;
   return mapMessage(data);
+}
+
+export async function listUsers(excludeUserId) {
+  let query = supabase
+    .from("users")
+    .select(USER_COLUMNS)
+    .order("full_name", { ascending: true });
+
+  if (excludeUserId) {
+    query = query.neq("id", excludeUserId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return (data || []).map(mapUser);
+}
+
+export async function updateUser(userId, updates) {
+  const payload = {};
+
+  if (updates.full_name !== undefined) payload.full_name = updates.full_name;
+  if (updates.username !== undefined) payload.username = updates.username;
+
+  if (Object.keys(payload).length === 0) {
+    throw new Error("No profile fields to update");
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .update(payload)
+    .eq("id", userId)
+    .select(USER_COLUMNS)
+    .single();
+
+  if (error) throw error;
+  return mapUser(data);
+}
+
+async function findConversation(userId, conversationId) {
+  const conversations = await getConversations(userId);
+  const conversation = conversations.find((item) => item.id === conversationId);
+
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+
+  return conversation;
+}
+
+export async function getOrCreateDirectConversation(userId, otherUserId) {
+  if (!userId || !otherUserId) {
+    throw new Error("userId and otherUserId are required");
+  }
+
+  if (userId === otherUserId) {
+    throw new Error("You cannot start a conversation with yourself");
+  }
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from("conversation_participants")
+    .select("conversation_id")
+    .eq("user_id", userId);
+
+  if (membershipError) throw membershipError;
+
+  const conversationIds = [
+    ...new Set((memberships || []).map((row) => row.conversation_id)),
+  ];
+
+  if (conversationIds.length > 0) {
+    const { data: shared, error: sharedError } = await supabase
+      .from("conversation_participants")
+      .select("conversation_id")
+      .in("conversation_id", conversationIds)
+      .eq("user_id", otherUserId)
+      .limit(1);
+
+    if (sharedError) throw sharedError;
+
+    if (shared && shared.length > 0) {
+      return findConversation(userId, shared[0].conversation_id);
+    }
+  }
+
+  const conversationId = randomUUID();
+
+  const { error: conversationError } = await supabase
+    .from("conversations")
+    .insert({ id: conversationId });
+
+  if (conversationError) throw conversationError;
+
+  const { error: participantError } = await supabase
+    .from("conversation_participants")
+    .insert([
+      { conversation_id: conversationId, user_id: userId },
+      { conversation_id: conversationId, user_id: otherUserId },
+    ]);
+
+  if (participantError) {
+    await supabase.from("conversations").delete().eq("id", conversationId);
+    throw participantError;
+  }
+
+  return findConversation(userId, conversationId);
 }

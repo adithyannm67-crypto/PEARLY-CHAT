@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { SquarePen, Settings, Search, LogOut } from 'lucide-react';
 import Avatar from '@/components/Avatar';
+import NewChatModal from '@/components/NewChatModal';
+import SettingsModal from '@/components/SettingsModal';
 import type { ChatUser, Conversation } from '@/types/chat';
 
 interface SidebarProps {
@@ -12,6 +14,8 @@ interface SidebarProps {
   error: string;
   selectedConversationId: string | null;
   onSelectConversation: (id: string) => void;
+  onConversationCreated: (conversation: Conversation) => void;
+  onUserUpdated: (user: ChatUser) => void;
   onLogout: () => void;
 }
 
@@ -59,9 +63,14 @@ export default function Sidebar({
   error,
   selectedConversationId,
   onSelectConversation,
+  onConversationCreated,
+  onUserUpdated,
   onLogout,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeModal, setActiveModal] = useState<'new-chat' | 'settings' | null>(
+    null
+  );
 
   const filteredConversations = conversations.filter((conversation) => {
     const otherUser = conversation.otherUser;
@@ -91,14 +100,20 @@ export default function Sidebar({
           <button
             type="button"
             aria-label="New chat"
-            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            title="New chat"
+            onClick={() => setActiveModal('new-chat')}
+            disabled={!currentUser}
+            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <SquarePen size={18} />
           </button>
           <button
             type="button"
             aria-label="Settings"
-            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            title="Settings"
+            onClick={() => setActiveModal('settings')}
+            disabled={!currentUser}
+            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Settings size={18} />
           </button>
@@ -196,6 +211,22 @@ export default function Sidebar({
           </div>
         )}
       </div>
+
+      {activeModal === 'new-chat' && currentUser && (
+        <NewChatModal
+          currentUserId={currentUser.id}
+          onClose={() => setActiveModal(null)}
+          onConversationCreated={onConversationCreated}
+        />
+      )}
+
+      {activeModal === 'settings' && currentUser && (
+        <SettingsModal
+          currentUser={currentUser}
+          onClose={() => setActiveModal(null)}
+          onUserUpdated={onUserUpdated}
+        />
+      )}
     </aside>
   );
 }

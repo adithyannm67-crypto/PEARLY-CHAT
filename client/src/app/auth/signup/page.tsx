@@ -4,6 +4,7 @@ import React, { useState, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import AuthLayout from "@/components/AuthLayout";
+import { useSupabase } from "@/components/AuthProvider";
 import {
   User,
   Mail,
@@ -15,6 +16,7 @@ import {
 
 export default function SignupPage() {
   const router = useRouter();
+  const { supabase } = useSupabase();
 
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
@@ -73,14 +75,31 @@ export default function SignupPage() {
         return;
       }
 
-      console.log("Signup successful:", data);
+      const sessionData = data?.data?.session ?? data?.session;
 
+      // When email confirmation is disabled Supabase returns a session,
+      // so sign the browser in and go straight to the dashboard.
+      if (sessionData?.access_token && sessionData?.refresh_token) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: sessionData.access_token,
+          refresh_token: sessionData.refresh_token,
+        });
+
+        if (sessionError) {
+          setError("Could not start your session. Please try again.");
+          return;
+        }
+
+        router.push("/dashboard");
+        return;
+      }
+
+      // Email confirmation is required - don't send the user to the
+      // dashboard without a session.
       setSuccess(
-        "Check your email to confirm your account. Then log in."
+        "Account created. Check your email to confirm your account, then log in."
       );
-
-      router.push("/dashboard");
-    } catch (err) {
+    } catch {
       setError("Network error. Please try again.");
     } finally {
       setIsLoading(false);
