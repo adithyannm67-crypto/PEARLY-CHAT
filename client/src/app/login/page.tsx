@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSupabase } from '@/lib/supabase/context';
 import {
   MessageCircle,
   Eye,
@@ -15,6 +16,7 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { supabase, session, signIn, signUp, signOut } = useSupabase();
 
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState({
@@ -35,11 +37,21 @@ export default function LoginPage() {
     setMounted(true);
   }, []);
 
+  // Clear errors when user starts typing
+  const clearError = (field: keyof typeof formData) => {
+    setErrors((prev) => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     const fieldKey = name === 'identifier' ? 'username' : name;
     setFormData((prev) => ({ ...prev, [fieldKey]: value }));
 
+    // Clear relevant errors on input
     if (errors[fieldKey] || errors[name]) {
       setErrors((prev) => {
         const next = { ...prev };
@@ -50,8 +62,8 @@ export default function LoginPage() {
     }
   };
 
-  const switchMode = (mode: boolean) => {
-    setIsLogin(mode);
+  const switchMode = () => {
+    setIsLogin((prev) => !prev);
     setErrors({});
     setFormData({
       name: '',
@@ -64,74 +76,143 @@ export default function LoginPage() {
     setShowConfirmPassword(false);
   };
 
-  const validate = () => {
-    const newErrors: Record<string, string> = {};
+  // Login submission with Supabase
+  const handleLoginSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
 
-    if (isLogin) {
-      if (!formData.username.trim()) {
-        newErrors.username = 'Username or email is required';
-      }
-      if (!formData.password) {
-        newErrors.password = 'Password is required';
-      } else if (
-        !newErrors.username &&
-        (formData.username.trim() !== 'demo' || formData.password !== 'password123')
-      ) {
-        newErrors.password = 'Invalid credentials. Try demo / password123';
-      }
-    } else {
-      if (!formData.name.trim()) {
-        newErrors.name = 'Full name is required';
-      }
-      if (!formData.username.trim()) {
-        newErrors.username = 'Username is required';
-      }
-      if (!formData.email.trim()) {
-        newErrors.email = 'Email is required';
-      } else if (!/\S+@\S+\.\S+/.test(formData.email.trim())) {
-        newErrors.email = 'Please enter a valid email';
-      }
-      if (!formData.password) {
-        newErrors.password = 'Password is required';
-      } else if (formData.password.length < 8) {
-        newErrors.password = 'Password must be at least 8 characters';
-      }
-      if (formData.password !== formData.confirmPassword) {
-        newErrors.confirmPassword = 'Passwords do not match';
+    const { username, email } = formData;
+
+    // Determine credentials: if username provided, we need to look up email
+    let emailToUse = email;
+    let loginError = '';
+
+    if (!emailToUse && username) {
+      // Try to resolve username to email via server endpoint
+      try {
+        const resolveRes = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/auth/resolve-username`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username }),
+        });
+
+        if (resolveRes.ok) {
+          const data = await resolveRes.json();
+          emailToUse = data.email;
+        } else {
+          loginError = 'Invalid username or email';
+        }
+      } catch (err) {
+        loginError = 'Network error. Please try again.';
       }
     }
 
-    return newErrors;
-  };
-
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    const validationErrors = validate();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
+    if (loginError) {
+      setErrors({ login: loginError });
+      setIsLoading(false);
       return;
     }
 
+    // Perform Supabase sign in
+    const { error } = await signIn(emailToUse!, formData.password);
+
+    setIsLoading(false);
+
+    if (error) {
+      // Handle specific error types
+      switch (error.error) {
+        case 'Invalid login credentials':
+          setErrors({ login: 'Invalid email/username or password' });
+          break;
+        case 'Email not confirmed':
+          setErrors({ login: 'Please confirm your email address before logging in' });
+          break;
+        default:
+          setErrors({ login: error.error || 'Authentication failed' });
+      }
+      return;
+    }
+
+    // Success - remember me handling and redirect
+    if (rememberMe) {
+      // The session is managed by Supabase, rememberMe can be used
+      // to persist the session beyond the default duration
+    }
+
+    router.push('/');
+  };
+
+  // Signup submission with Supabase
+  const handleSignupSubmit = async (e: FormEvent) => {
+    e.preventDefault();
     setIsLoading(true);
 
-    if (isLogin) {
-      setTimeout(() => {
-        router.push('/');
-      }, 1200);
-    } else {
-      setTimeout(() => {
-        setIsLoading(false);
-        setIsLogin(true);
-        setFormData({
-          name: '',
-          username: '',
-          email: '',
-          password: '',
-          confirmPassword: '',
-        });
-        setErrors({});
-      }, 1200);
+    const { name, username, email, password, confirmPassword } = formData;
+
+    // Validate password match
+    if (password !== confirmPassword) {
+      setErrors({ confirmPassword: 'Passwords do not match' });
+      setIsLoading(false);
+      return;
+    }
+
+    // Perform Supabase sign up with user metadata
+    const { error } = await signUp(email, password, name, username);
+
+    setIsLoading(false);
+
+    if (error) {
+      // Handle specific error types
+      switch (error.error) {
+        case 'User already registered':
+          setErrors({ email: 'An account with this email already exists' });
+          break;
+        case 'Password too short':
+          setErrors({ password: 'Password must be at least 8 characters' });
+          break;
+        case 'Invalid email':
+          setErrors({ email: 'Please enter a valid email address' });
+          break;
+        case 'Email already confirmed':
+          // This can happen if sign-up flow expects confirmation
+          setErrors({ email: 'Email is already confirmed. Please try logging in.' });
+          break;
+        default:
+          setErrors({ email: error.error || 'Signup failed' });
+      }
+      return;
+    }
+
+    // Signup successful - user may need to check email
+    // Auto-login if autoLogin was enabled, otherwise show message
+    setErrors({ success: 'Check your email to confirm your account. Then log in.' });
+
+    // Switch back to login form after a delay
+    setTimeout(() => {
+      setIsLogin(true);
+      setFormData({
+        name: '',
+        username: '',
+        email: '',
+        password: '',
+        confirmPassword: '',
+      });
+      setErrors({});
+    }, 5000);
+  };
+
+  // Handle input changes and clear errors
+  const handleInputBlur = (e: ChangeEvent<HTMLInputElement>) => {
+    const { name } = e.target;
+    // Clear error on blur if user fixed it
+    if (errors[name]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
     }
   };
 
@@ -150,21 +231,15 @@ export default function LoginPage() {
         <div className="mt-12 space-y-4">
           <div className="flex items-center gap-3">
             <Shield size={20} className="text-primary shrink-0" />
-            <span className="text-sm text-text-secondary">
-              End-to-end encrypted messaging
-            </span>
+            <span className="text-sm text-text-secondary">End-to-end encrypted messaging</span>
           </div>
           <div className="flex items-center gap-3">
             <Lock size={20} className="text-primary shrink-0" />
-            <span className="text-sm text-text-secondary">
-              Peer-to-peer architecture
-            </span>
+            <span className="text-sm text-text-secondary">Peer-to-peer architecture</span>
           </div>
           <div className="flex items-center gap-3">
             <Shield size={20} className="text-primary shrink-0" />
-            <span className="text-sm text-text-secondary">
-              No data collection
-            </span>
+            <span className="text-sm text-text-secondary">No data collection</span>
           </div>
         </div>
       </div>
@@ -191,7 +266,7 @@ export default function LoginPage() {
           </p>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} noValidate>
+          <form onSubmit={isLogin ? handleLoginSubmit : handleSignupSubmit} noValidate>
             {isLogin ? (
               /* Login Fields */
               <div className="space-y-4">
@@ -367,17 +442,11 @@ export default function LoginPage() {
                       }
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none cursor-pointer"
                     >
-                      {showConfirmPassword ? (
-                        <EyeOff size={18} />
-                      ) : (
-                        <Eye size={18} />
-                      )}
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </button>
                   </div>
                   {errors.confirmPassword && (
-                    <p className="text-error text-xs mt-1">
-                      {errors.confirmPassword}
-                    </p>
+                    <p className="text-error text-xs mt-1">{errors.confirmPassword}</p>
                   )}
                 </div>
               </div>
@@ -393,9 +462,7 @@ export default function LoginPage() {
                     onChange={(e) => setRememberMe(e.target.checked)}
                     className="accent-primary rounded w-4 h-4 cursor-pointer"
                   />
-                  <span className="text-sm text-text-secondary">
-                    Remember me
-                  </span>
+                  <span className="text-sm text-text-secondary">Remember me</span>
                 </label>
                 <span className="text-sm text-primary hover:underline cursor-pointer">
                   Forgot password?
@@ -430,7 +497,7 @@ export default function LoginPage() {
               </span>
               <button
                 type="button"
-                onClick={() => switchMode(!isLogin)}
+                onClick={switchMode}
                 className="text-sm text-primary hover:underline font-medium cursor-pointer"
               >
                 {isLogin ? 'Create one' : 'Sign in'}
@@ -448,4 +515,4 @@ export default function LoginPage() {
       </footer>
     </div>
   );
-}
+}
