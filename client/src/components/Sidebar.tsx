@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SquarePen, Settings, Search } from 'lucide-react';
+import { SquarePen, Settings, Search, LogOut } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 import type { ChatUser, Conversation } from '@/types/chat';
 
@@ -12,6 +12,7 @@ interface SidebarProps {
   error: string;
   selectedConversationId: string | null;
   onSelectConversation: (id: string) => void;
+  onLogout: () => void;
 }
 
 function formatTime(timestamp: string): string {
@@ -58,6 +59,7 @@ export default function Sidebar({
   error,
   selectedConversationId,
   onSelectConversation,
+  onLogout,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -99,6 +101,15 @@ export default function Sidebar({
             className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
           >
             <Settings size={18} />
+          </button>
+          <button
+            type="button"
+            aria-label="Log out"
+            title="Log out"
+            onClick={onLogout}
+            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+          >
+            <LogOut size={18} />
           </button>
         </div>
       </header>

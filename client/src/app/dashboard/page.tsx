@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import { useSupabase } from '@/components/AuthProvider';
 import type { ChatUser, Conversation } from '@/types/chat';
 
 export default function Dashboard() {
-  const { session } = useSupabase();
+  const router = useRouter();
+  const { session, signOut } = useSupabase();
   const userId = session?.user?.id ?? null;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -68,6 +70,11 @@ export default function Dashboard() {
     setShowChat(false);
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    router.push('/auth/login');
+  };
+
   const displayConversations = userId ? conversations : [];
   const displayCurrentUser = userId ? currentUser : null;
   const displayLoading = userId ? loading : false;
@@ -92,6 +99,7 @@ export default function Dashboard() {
             error={displayError}
             selectedConversationId={selectedConversationId}
             onSelectConversation={handleSelectConversation}
+            onLogout={handleLogout}
           />
         </div>
       </div>
