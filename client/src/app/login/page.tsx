@@ -1,11 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, FormEvent, ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChangeEvent } from 'react';
 import { useSupabase } from '@/lib/supabase/context';
-import { LoginForm } from '@/components/login/LoginForm';
-import { SignupForm } from '@/components/login/SignupForm';
 import {
   MessageCircle,
   Eye,
@@ -19,81 +16,56 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { supabase } = useSupabase();
+  const { supabase, session, signIn, signUp, signOut } = useSupabase();
 
   const [isLogin, setIsLogin] = useState(true);
-
-  // Login form state
-  const [loginFormData, setLoginFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-  });
-  const [loginErrors, setLoginErrors] = useState<Record<string, string | undefined>>({});
-
-  // Signup form state
-  const [signupFormData, setSignupFormData] = useState({
+  const [formData, setFormData] = useState({
     name: '',
     username: '',
     email: '',
     password: '',
     confirmPassword: '',
   });
-  const [signupErrors, setSignupErrors] = useState<Record<string, string | undefined>>({});
-
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  // Initialize login form state
   useEffect(() => {
-    if (isLogin) {
-      setLoginFormData({ username: '', email: '', password: '' });
-    }
-  }, [isLogin]);
+    setMounted(true);
+  }, []);
 
-  // Clear login errors on input
-  const clearLoginError = (field: keyof typeof loginErrors) => {
-    setLoginErrors((prev) => {
+  // Clear errors when user starts typing
+  const clearError = (field: keyof typeof formData) => {
+    setErrors((prev) => {
       const next = { ...prev };
       delete next[field];
       return next;
     });
   };
 
-  // Clear signup errors on input
-  const clearSignupError = (field: keyof typeof signupErrors) => {
-    setSignupErrors((prev) => {
-      const next = { ...prev };
-      delete next[field];
-      return next;
-    });
-  };
-
-  const handleLoginChange = (e: ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setLoginFormData((prev) => ({ ...prev, [name]: value }));
+    const fieldKey = name === 'identifier' ? 'username' : name;
+    setFormData((prev) => ({ ...prev, [fieldKey]: value }));
 
-    if (loginErrors[name]) {
-      setLoginErrors((prev) => {
+    // Clear relevant errors on input
+    if (errors[fieldKey] || errors[name]) {
+      setErrors((prev) => {
         const next = { ...prev };
+        delete next[fieldKey];
         delete next[name];
         return next;
       });
     }
   };
 
-  const handleSwitchMode = () => {
-    setIsLogin(!isLogin);
-    setLoginErrors({});
-    setSignupErrors({});
-    setLoginFormData({
-      username: '',
-      email: '',
-      password: '',
-    });
-    setSignupFormData({
+  const switchMode = () => {
+    setIsLogin((prev) => !prev);
+    setErrors({});
+    setFormData({
       name: '',
       username: '',
       email: '',
@@ -104,19 +76,145 @@ export default function LoginPage() {
     setShowConfirmPassword(false);
   };
 
-  // If already authenticated, redirect to home
-  useEffect(() => {
-    if (isLogin && supabase?.auth?.getSession) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session && isLogin) {
-          router.push('/');
+  // Login submission with Supabase
+  const handleLoginSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    const { username, email } = formData;
+
+    // Determine credentials: if username provided, we need to look up email
+    let emailToUse = email;
+    let loginError = '';
+
+    if (!emailToUse && username) {
+      // Try to resolve username to email via server endpoint (relative path)
+      try {
+        const resolveRes = await fetch('/api/auth/resolve-username', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username }),
+        });
+
+        if (resolveRes.ok) {
+          const data = await resolveRes.json();
+          emailToUse = data.email;
+        } else {
+          loginError = 'Invalid username or email';
         }
+      } catch (err) {
+        loginError = 'Network error. Please try again.';
+      }
+    }
+
+    if (loginError) {
+      setErrors({ login: loginError });
+      setIsLoading(false);
+      return;
+    }
+
+    // Perform Supabase sign in
+    const { error } = await signIn(emailToUse!, formData.password);
+
+    setIsLoading(false);
+
+    if (error) {
+      // Handle specific error types
+      switch (error.error) {
+        case 'Invalid login credentials':
+          setErrors({ login: 'Invalid email/username or password' });
+          break;
+        case 'Email not confirmed':
+          setErrors({ login: 'Please confirm your email address before logging in' });
+          break;
+        default:
+          setErrors({ login: error.error || 'Authentication failed' });
+      }
+      return;
+    }
+
+    // Success - remember me handling and redirect
+    if (rememberMe) {
+      // The session is managed by Supabase, rememberMe can be used
+      // to persist the session beyond the default duration
+    }
+
+    router.push('/');
+  };
+
+  // Signup submission with Supabase
+  const handleSignupSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    const { name, username, email, password, confirmPassword } = formData;
+
+    // Validate password match
+    if (password !== confirmPassword) {
+      setErrors({ confirmPassword: 'Passwords do not match' });
+      setIsLoading(false);
+      return;
+    }
+
+    // Perform Supabase sign up with user metadata
+    const { error } = await signUp(email, password, name, username);
+
+    setIsLoading(false);
+
+    if (error) {
+      // Handle specific error types
+      switch (error.error) {
+        case 'User already registered':
+          setErrors({ email: 'An account with this email already exists' });
+          break;
+        case 'Password too short':
+          setErrors({ password: 'Password must be at least 8 characters' });
+          break;
+        case 'Invalid email':
+          setErrors({ email: 'Please enter a valid email address' });
+          break;
+        case 'Email already confirmed':
+          // This can happen if sign-up flow expects confirmation
+          setErrors({ email: 'Email is already confirmed. Please try logging in.' });
+          break;
+        default:
+          setErrors({ email: error.error || 'Signup failed' });
+      }
+      return;
+    }
+
+    // Signup successful - user may need to check email
+    // Auto-login if autoLogin was enabled, otherwise show message
+    setErrors({ success: 'Check your email to confirm your account. Then log in.' });
+
+    // Switch back to login form after a delay
+    setTimeout(() => {
+      setIsLogin(true);
+      setFormData({
+        name: '',
+        username: '',
+        email: '',
+        password: '',
+        confirmPassword: '',
+      });
+      setErrors({});
+    }, 5000);
+  };
+
+  // Handle input changes and clear errors
+  const handleInputBlur = (e: ChangeEvent<HTMLInputElement>) => {
+    const { name } = e.target;
+    // Clear error on blur if user fixed it
+    if (errors[name]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
       });
     }
-    if (!isLogin) {
-      setIsLogin(true);
-    }
-  }, [isLogin, router]);
+  };
 
   return (
     <div className="relative min-h-screen bg-bg-main flex">
@@ -149,7 +247,9 @@ export default function LoginPage() {
       {/* Right side form container */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 pb-20">
         <div
-          className={`w-full max-w-md transition-opacity duration-300 ${isLogin ? 'opacity-100 animate-fade-in' : 'opacity-0'}`}
+          className={`w-full max-w-md transition-opacity duration-300 ${
+            mounted ? 'opacity-100 animate-fade-in' : 'opacity-0'
+          }`}
         >
           {/* Header section */}
           <div className="flex items-center gap-2 mb-8">
@@ -166,6 +266,7 @@ export default function LoginPage() {
           </p>
 
           {/* Form */}
+<<<<<<< HEAD
           {isLogin ? (
             <LoginForm
               isLogin={isLogin}
@@ -220,6 +321,247 @@ export default function LoginPage() {
               }}
             />
           )}
+=======
+          <form onSubmit={isLogin ? handleLoginSubmit : handleSignupSubmit} noValidate>
+            {isLogin ? (
+              /* Login Fields */
+              <div className="space-y-4">
+                <div>
+                  <div className="relative">
+                    <User
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+                      size={18}
+                    />
+                    <input
+                      type="text"
+                      name="identifier"
+                      placeholder="Username or email"
+                      value={formData.username}
+                      onChange={handleChange}
+                      autoComplete="username"
+                      className="w-full bg-surface border border-border-custom rounded-lg pl-10 pr-4 py-3 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 text-sm"
+                    />
+                  </div>
+                  {(errors.username || errors.identifier) && (
+                    <p className="text-error text-xs mt-1">
+                      {errors.username || errors.identifier}
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="relative">
+                    <Lock
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+                      size={18}
+                    />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      placeholder="Password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      autoComplete="current-password"
+                      className="w-full bg-surface border border-border-custom rounded-lg pl-10 pr-10 py-3 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {errors.password && (
+                    <p className="text-error text-xs mt-1">{errors.password}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Registration Fields */
+              <div className="space-y-4">
+                <div>
+                  <div className="relative">
+                    <User
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+                      size={18}
+                    />
+                    <input
+                      type="text"
+                      name="name"
+                      placeholder="Full name"
+                      value={formData.name}
+                      onChange={handleChange}
+                      autoComplete="name"
+                      className="w-full bg-surface border border-border-custom rounded-lg pl-10 pr-4 py-3 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 text-sm"
+                    />
+                  </div>
+                  {errors.name && (
+                    <p className="text-error text-xs mt-1">{errors.name}</p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="relative">
+                    <User
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+                      size={18}
+                    />
+                    <input
+                      type="text"
+                      name="username"
+                      placeholder="Username"
+                      value={formData.username}
+                      onChange={handleChange}
+                      autoComplete="username"
+                      className="w-full bg-surface border border-border-custom rounded-lg pl-10 pr-4 py-3 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 text-sm"
+                    />
+                  </div>
+                  {errors.username && (
+                    <p className="text-error text-xs mt-1">{errors.username}</p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="relative">
+                    <Mail
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+                      size={18}
+                    />
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="Email address"
+                      value={formData.email}
+                      onChange={handleChange}
+                      autoComplete="email"
+                      className="w-full bg-surface border border-border-custom rounded-lg pl-10 pr-4 py-3 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 text-sm"
+                    />
+                  </div>
+                  {errors.email && (
+                    <p className="text-error text-xs mt-1">{errors.email}</p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="relative">
+                    <Lock
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+                      size={18}
+                    />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      placeholder="Password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      autoComplete="new-password"
+                      className="w-full bg-surface border border-border-custom rounded-lg pl-10 pr-10 py-3 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {errors.password && (
+                    <p className="text-error text-xs mt-1">{errors.password}</p>
+                  )}
+                </div>
+
+                <div>
+                  <div className="relative">
+                    <Lock
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+                      size={18}
+                    />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      name="confirmPassword"
+                      placeholder="Confirm password"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      autoComplete="new-password"
+                      className="w-full bg-surface border border-border-custom rounded-lg pl-10 pr-10 py-3 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-200 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      aria-label={
+                        showConfirmPassword
+                          ? 'Hide password'
+                          : 'Show password'
+                      }
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text-primary transition-colors focus:outline-none cursor-pointer"
+                    >
+                      {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && (
+                    <p className="text-error text-xs mt-1">{errors.confirmPassword}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Below password field for login */}
+            {isLogin && (
+              <div className="flex items-center justify-between mt-4">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="accent-primary rounded w-4 h-4 cursor-pointer"
+                  />
+                  <span className="text-sm text-text-secondary">Remember me</span>
+                </label>
+                <span className="text-sm text-primary hover:underline cursor-pointer">
+                  Forgot password?
+                </span>
+              </div>
+            )}
+            {isLogin && errors.login && <p className="text-error text-sm mt-2 ">{errors.login}</p>}
+
+            {/* Action button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full mt-6 bg-primary hover:bg-primary/90 text-white font-medium py-3 rounded-lg flex items-center justify-center gap-2 transition-all duration-200 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <span>
+                  {isLogin ? 'Signing in...' : 'Creating account...'}
+                </span>
+              ) : (
+                <>
+                  <span>{isLogin ? 'Sign in' : 'Create account'}</span>
+                  <ArrowRight size={18} />
+                </>
+              )}
+            </button>
+
+            {/* Toggle login / register */}
+            <div className="mt-6 text-center">
+              <span className="text-sm text-text-secondary">
+                {isLogin
+                  ? "Don't have an account? "
+                  : 'Already have an account? '}
+              </span>
+              <button
+                type="button"
+                onClick={switchMode}
+                className="text-sm text-primary hover:underline font-medium cursor-pointer"
+              >
+                {isLogin ? 'Create one' : 'Sign in'}
+              </button>
+            </div>
+          </form>
+>>>>>>> parent of e0e1dd2 (login signup refactored)
         </div>
       </div>
 
