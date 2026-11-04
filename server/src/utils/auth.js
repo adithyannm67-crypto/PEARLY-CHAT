@@ -1,9 +1,9 @@
-import supabase from '#/config/supabase.js';
+import supabase from "#config/supabase.js";
 
 // Verify JWT token from Supabase
-export const verifyAuthToken = async (token) => {
+async function verifyAuthToken(token) {
   if (!token) {
-    return { user: null, error: 'No token provided' };
+    return { user: null, error: "No token provided" };
   }
 
   const { data, error } = await supabase.auth.getUser(token);
@@ -13,18 +13,18 @@ export const verifyAuthToken = async (token) => {
   }
 
   return { user: data.user, error: null };
-};
+}
 
 // Check if user has profile
-export const checkUserProfileExists = async (userId) => {
+async function checkUserProfileExists(userId) {
   try {
     const { data, error } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('id', userId)
+      .from("profiles")
+      .select("id")
+      .eq("id", userId)
       .single();
 
-    if (error && error.code !== 'PGRST116') {
+    if (error && error.code !== "PGRST116") {
       // PGRST116 = no rows returned, that's OK
       throw error;
     }
@@ -33,10 +33,10 @@ export const checkUserProfileExists = async (userId) => {
   } catch (err) {
     return { exists: false, error: err.message };
   }
-};
+}
 
 // Generate sign-in link
-export const generateSignInLink = async (email, redirectTo) => {
+async function generateSignInLink(email, redirectTo) {
   const { data, error } = await supabase.auth.signInWithOtp({
     email,
     options: {
@@ -46,4 +46,10 @@ export const generateSignInLink = async (email, redirectTo) => {
 
   if (error) throw error;
   return data;
+}
+
+module.exports = {
+  verifyAuthToken,
+  checkUserProfileExists,
+  generateSignInLink,
 };

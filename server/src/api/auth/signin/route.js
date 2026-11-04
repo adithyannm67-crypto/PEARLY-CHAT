@@ -1,6 +1,7 @@
+import  parseBody  from "#utils/parseBody.js";
 import supabase from "#config/supabase.js";
-import parseBody from "#utils/parseBody.js";
-export default async function handler(req) {
+
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     throw new Error("Method not allowed. Only POST requests are accepted.");
   }
@@ -38,11 +39,27 @@ export default async function handler(req) {
     throw new Error(errorMessage);
   }
 
+  // Set secure httpOnly cookie with session token
+  if (data.session) {
+    const cookieOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: "/",
+    };
+
+    // Set the token cookie
+    res.setHeader("Set-Cookie", [
+      `sb:token=${data.session.access_token}; HttpOnly; Secure; SameSite=lax; Max-Age=${cookieOptions.maxAge}; Path=/`,
+    ]);
+  }
+
   // Return user session data
-  return new Object({
+  return {
     success: true,
     message: "Signin successful!",
     session: data.session,
     user: data.user,
-  });
-}
+  };
+};

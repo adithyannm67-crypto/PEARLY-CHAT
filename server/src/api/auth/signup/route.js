@@ -1,6 +1,6 @@
+import  parseBody  from "#utils/parseBody.js";
 import supabase from "#config/supabase.js";
-import parseBody from "#utils/parseBody.js";
-export default async function handler(req) {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     throw new Error("Method not allowed. Only POST requests are accepted.");
   }
@@ -52,9 +52,9 @@ export default async function handler(req) {
   }
 
   // Return success - user needs to confirm email
-  return new Object({
+  return {
     success: true,
     message: "Signup successful!",
     user: data.user,
-  });
-}
+  };
+};
