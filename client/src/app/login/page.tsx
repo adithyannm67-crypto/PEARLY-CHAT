@@ -166,7 +166,8 @@ export default function LoginPage() {
           </p>
 
           {/* Form */}
-          {isLogin ? (<LoginForm
+          {isLogin ? (
+            <LoginForm
               isLogin={isLogin}
               setIsLogin={setIsLogin}
               formData={loginFormData}
@@ -188,9 +189,9 @@ export default function LoginPage() {
                 });
                 return { error };
               }}
-              router={router} />
+              router={router}
+            />
           ) : (
-
             <SignupForm
               isLogin={isLogin}
               setIsLogin={setIsLogin}
