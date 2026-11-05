@@ -65,7 +65,8 @@ async function requestWithProfile(row, otherUserId, accessToken) {
   const profiles = await getProfilesByIds([otherUserId], accessToken);
   return mapRequest(
     row,
-    profiles.get(otherUserId) || mapUser({ id: otherUserId, username: "", full_name: "Unknown user" })
+    profiles.get(otherUserId) ||
+      mapUser({ id: otherUserId, username: "", full_name: "Unknown user" }),
   );
 }
 
@@ -97,26 +98,27 @@ async function findExistingConversation(userId, otherUserId, accessToken) {
   return Boolean(shared && shared.length > 0);
 }
 
+export async function listConnectionRequests1(userId, accessToken) {
+  const db = supabaseAuth(accessToken);
 
+  const { data, error } = await db
+    .from("connection_requests")
+    .select(REQUEST_COLUMNS)
+    .eq("sender_id", userId)
+    .order("created_at", { ascending: true });
 
-export async function listConnectionRequests1(userId, accessToken){
+  if (error) throw error;
 
-    const db = supabaseAuth(accessToken);
-
-    const { data, error } = await db
-      .from("connection_requests")
-      .select(REQUEST_COLUMNS)
-      .eq("sender_id", userId)
-      .order("created_at", { ascending: true });
-
-    if (error) throw error;
-
-    console.log("Connection requests:", data);
-    return data.map((row) => mapRequest(row, null));
-
+  console.log("Connection requests:", data);
+  return data.map((row) => mapRequest(row, null));
 }
 
-export async function listConnectionRequests(userId, accessToken, direction = "incoming", status = "PENDING") {
+export async function listConnectionRequests(
+  userId,
+  accessToken,
+  direction = "incoming",
+  status = "PENDING",
+) {
   const db = supabaseAuth(accessToken);
   const isOutgoing = direction === "outgoing";
   const userColumn = isOutgoing ? "sender_id" : "receiver_id";
@@ -144,8 +146,9 @@ export async function listConnectionRequests(userId, accessToken, direction = "i
   return (data || []).map((row) =>
     mapRequest(
       row,
-      profiles.get(row[otherUserColumn]) || mapUser({ id: row[otherUserColumn] })
-    )
+      profiles.get(row[otherUserColumn]) ||
+        mapUser({ id: row[otherUserColumn] }),
+    ),
   );
 }
 
@@ -167,7 +170,7 @@ export async function createConnectionRequest(userId, receiverId, accessToken) {
     .eq("status", CONNECTION_REQUEST_STATUS.PENDING)
     .or(
       `and(sender_id.eq.${userId},receiver_id.eq.${receiverId}),` +
-        `and(sender_id.eq.${receiverId},receiver_id.eq.${userId})`
+        `and(sender_id.eq.${receiverId},receiver_id.eq.${userId})`,
     )
     .limit(1)
     .maybeSingle();
@@ -181,7 +184,7 @@ export async function createConnectionRequest(userId, receiverId, accessToken) {
 
     throw new HttpError(
       409,
-      "This user has already sent you a connection request. Check your pending requests."
+      "This user has already sent you a connection request. Check your pending requests.",
     );
   }
 
@@ -190,7 +193,6 @@ export async function createConnectionRequest(userId, receiverId, accessToken) {
     .insert({
       sender_id: userId,
       receiver_id: receiverId,
-      
     })
     .select(REQUEST_COLUMNS)
     .single();
@@ -235,7 +237,7 @@ export async function acceptConnectionRequest(userId, requestId, accessToken) {
   const conversation = await getOrCreateDirectConversation(
     userId,
     request.sender_id,
-    accessToken
+    accessToken,
   );
 
   const { data: updated, error: updateError } = await db
@@ -262,22 +264,30 @@ export async function acceptConnectionRequest(userId, requestId, accessToken) {
 }
 
 export async function cancelConnectionRequest(userId, requestId, accessToken) {
-  const { data: updated, error } = await supabaseAuth(accessToken)
-    .from("connection_requests")
+  const db = supabaseAuth(accessToken);
+console.log("r",requestId,"u", userId);
+
+  const { data: updated, error } = await db.from("connection_requests")
     .update({ status: CONNECTION_REQUEST_STATUS.CANCELLED })
     .eq("id", requestId)
     .eq("sender_id", userId)
     .eq("status", CONNECTION_REQUEST_STATUS.PENDING)
     .select(REQUEST_COLUMNS)
     .maybeSingle();
-
+  console.log("[Connection Request] Cancelled:", updated);
   if (error) throw error;
 
   if (!updated) {
     throw new HttpError(404, "Pending connection request not found");
   }
 
-  return { request: await requestWithProfile(updated, updated.receiver_id, accessToken) };
+  return {
+    request: await requestWithProfile(
+      updated,
+      updated.receiver_id,
+      accessToken,
+    ),
+  };
 }
 
 export async function listConnectionRequestHistory(userId, accessToken) {
@@ -290,7 +300,7 @@ export async function listConnectionRequestHistory(userId, accessToken) {
     ...incoming.map((request) => ({ ...request, direction: "incoming" })),
     ...outgoing.map((request) => ({ ...request, direction: "outgoing" })),
   ].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 }
 
