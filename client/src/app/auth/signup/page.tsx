@@ -62,14 +62,14 @@ export default function SignupPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: email.trim(),
+          email: email.trim().toLowerCase(),
           password,
           name: name.trim(),
-          username: username.trim(),
+          username: username.trim().toLowerCase(),
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok || data.error) {
         setError(data.error || "Signup failed");
@@ -298,7 +298,7 @@ export default function SignupPage() {
             </span>
 
             <Link
-              href="/login"
+              href="/auth/login"
               className="text-sm text-primary hover:underline font-medium"
             >
               Sign in

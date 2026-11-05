@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
-import supabase from "../config/supabase.js";
+import supabaseAuth from "#config/supabase-auth.js";
 
-const USER_COLUMNS = "id, email, username, avatar_url, full_name, created_at";
+const USER_OWN_COLUMNS = "id, email, username, avatar_url, full_name, created_at";
+const USER_PUBLIC_COLUMNS = "id, username, avatar_url, full_name, created_at";
 const MESSAGE_COLUMNS = "id, conversation_id, sender_id, content, created_at";
 
 function getInitials(name, username) {
@@ -40,10 +40,10 @@ function mapMessage(row) {
   };
 }
 
-export async function getUser(userId) {
-  const { data, error } = await supabase
+export async function getUser(userId, accessToken) {
+  const { data, error } = await supabaseAuth(accessToken)
     .from("users")
-    .select(USER_COLUMNS)
+    .select(USER_OWN_COLUMNS)
     .eq("id", userId)
     .maybeSingle();
 
@@ -51,8 +51,10 @@ export async function getUser(userId) {
   return mapUser(data);
 }
 
-export async function getConversations(userId) {
-  const { data: memberships, error: membershipError } = await supabase
+export async function getConversations(userId, accessToken) {
+  const db = supabaseAuth(accessToken);
+
+  const { data: memberships, error: membershipError } = await db
     .from("conversation_participants")
     .select("conversation_id")
     .eq("user_id", userId);
@@ -65,7 +67,7 @@ export async function getConversations(userId) {
 
   if (conversationIds.length === 0) return [];
 
-  const { data: participants, error: participantError } = await supabase
+  const { data: participants, error: participantError } = await db
     .from("conversation_participants")
     .select("conversation_id, user_id")
     .in("conversation_id", conversationIds);
@@ -77,8 +79,8 @@ export async function getConversations(userId) {
   ];
 
   const [usersResult, messagesResult] = await Promise.all([
-    supabase.from("users").select(USER_COLUMNS).in("id", participantIds),
-    supabase
+    db.from("public_user_profiles").select(USER_PUBLIC_COLUMNS).in("id", participantIds),
+    db
       .from("messages")
       .select(MESSAGE_COLUMNS)
       .in("conversation_id", conversationIds)
@@ -105,8 +107,7 @@ export async function getConversations(userId) {
       .map((row) => row.user_id);
 
     const otherUserId = memberIds.find((id) => id !== userId);
-    const conversationMessages =
-      messagesByConversation.get(conversationId) || [];
+    const conversationMessages = messagesByConversation.get(conversationId) || [];
     const lastMessage = conversationMessages[conversationMessages.length - 1];
 
     return {
@@ -124,8 +125,8 @@ export async function getConversations(userId) {
   );
 }
 
-export async function getMessages(conversationId) {
-  const { data, error } = await supabase
+export async function getMessages(conversationId, accessToken) {
+  const { data, error } = await supabaseAuth(accessToken)
     .from("messages")
     .select(MESSAGE_COLUMNS)
     .eq("conversation_id", conversationId)
@@ -135,8 +136,8 @@ export async function getMessages(conversationId) {
   return (data || []).map(mapMessage);
 }
 
-export async function createMessage({ conversationId, senderId, content }) {
-  const { data, error } = await supabase
+export async function createMessage({ conversationId, senderId, content, accessToken }) {
+  const { data, error } = await supabaseAuth(accessToken)
     .from("messages")
     .insert({
       conversation_id: conversationId,
@@ -150,14 +151,20 @@ export async function createMessage({ conversationId, senderId, content }) {
   return mapMessage(data);
 }
 
-export async function listUsers(excludeUserId) {
-  let query = supabase
-    .from("users")
-    .select(USER_COLUMNS)
-    .order("full_name", { ascending: true });
+export async function listUsers(excludeUserId, accessToken, search = "") {
+  let query = supabaseAuth(accessToken)
+    .from("public_user_profiles")
+    .select(USER_PUBLIC_COLUMNS)
+    .order("full_name", { ascending: true })
+    .limit(50);
 
   if (excludeUserId) {
     query = query.neq("id", excludeUserId);
+  }
+
+  const term = search.trim().replace(/[%_,()]/g, "");
+  if (term) {
+    query = query.or(`username.ilike.%${term}%,full_name.ilike.%${term}%`);
   }
 
   const { data, error } = await query;
@@ -166,29 +173,46 @@ export async function listUsers(excludeUserId) {
   return (data || []).map(mapUser);
 }
 
-export async function updateUser(userId, updates) {
+export async function updateUser(userId, updates, accessToken) {
   const payload = {};
 
-  if (updates.full_name !== undefined) payload.full_name = updates.full_name;
-  if (updates.username !== undefined) payload.username = updates.username;
+  if (updates.full_name !== undefined) {
+    payload.full_name = updates.full_name.trim();
+  }
+
+  if (updates.username !== undefined) {
+    payload.username = updates.username.trim().toLowerCase();
+  }
 
   if (Object.keys(payload).length === 0) {
     throw new Error("No profile fields to update");
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAuth(accessToken)
     .from("users")
     .update(payload)
     .eq("id", userId)
-    .select(USER_COLUMNS)
+    .select(USER_OWN_COLUMNS)
     .single();
 
   if (error) throw error;
   return mapUser(data);
 }
 
-async function findConversation(userId, conversationId) {
-  const conversations = await getConversations(userId);
+export async function isConversationParticipant(conversationId, userId, accessToken) {
+  const { data, error } = await supabaseAuth(accessToken)
+    .from("conversation_participants")
+    .select("conversation_id")
+    .eq("conversation_id", conversationId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return Boolean(data);
+}
+
+async function findConversation(userId, conversationId, accessToken) {
+  const conversations = await getConversations(userId, accessToken);
   const conversation = conversations.find((item) => item.id === conversationId);
 
   if (!conversation) {
@@ -198,60 +222,14 @@ async function findConversation(userId, conversationId) {
   return conversation;
 }
 
-export async function getOrCreateDirectConversation(userId, otherUserId) {
-  if (!userId || !otherUserId) {
-    throw new Error("userId and otherUserId are required");
-  }
+export async function getOrCreateDirectConversation(userId, otherUserId, accessToken) {
+  const { data: conversationId, error } = await supabaseAuth(accessToken).rpc(
+    "get_or_create_direct_conversation",
+    { p_other_user_id: otherUserId }
+  );
 
-  if (userId === otherUserId) {
-    throw new Error("You cannot start a conversation with yourself");
-  }
+  if (error) throw error;
+  if (!conversationId) throw new Error("Could not create conversation");
 
-  const { data: memberships, error: membershipError } = await supabase
-    .from("conversation_participants")
-    .select("conversation_id")
-    .eq("user_id", userId);
-
-  if (membershipError) throw membershipError;
-
-  const conversationIds = [
-    ...new Set((memberships || []).map((row) => row.conversation_id)),
-  ];
-
-  if (conversationIds.length > 0) {
-    const { data: shared, error: sharedError } = await supabase
-      .from("conversation_participants")
-      .select("conversation_id")
-      .in("conversation_id", conversationIds)
-      .eq("user_id", otherUserId)
-      .limit(1);
-
-    if (sharedError) throw sharedError;
-
-    if (shared && shared.length > 0) {
-      return findConversation(userId, shared[0].conversation_id);
-    }
-  }
-
-  const conversationId = randomUUID();
-
-  const { error: conversationError } = await supabase
-    .from("conversations")
-    .insert({ id: conversationId });
-
-  if (conversationError) throw conversationError;
-
-  const { error: participantError } = await supabase
-    .from("conversation_participants")
-    .insert([
-      { conversation_id: conversationId, user_id: userId },
-      { conversation_id: conversationId, user_id: otherUserId },
-    ]);
-
-  if (participantError) {
-    await supabase.from("conversations").delete().eq("id", conversationId);
-    throw participantError;
-  }
-
-  return findConversation(userId, conversationId);
+  return findConversation(userId, conversationId, accessToken);
 }

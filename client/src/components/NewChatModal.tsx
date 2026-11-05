@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 import ChatModal from '@/components/ChatModal';
+import { authFetch } from '@/lib/authFetch';
 import type { ChatUser, Conversation } from '@/types/chat';
 
 interface NewChatModalProps {
@@ -31,10 +32,18 @@ export default function NewChatModal({
       setError('');
 
       try {
-        const response = await fetch(
-          `/api/users?excludeUserId=${encodeURIComponent(currentUserId)}`,
-          { cache: 'no-store' }
-        );
+        const query = new URLSearchParams({
+          excludeUserId: currentUserId,
+        });
+
+        if (searchQuery.trim()) {
+          query.set('search', searchQuery.trim());
+        }
+
+        const response = await authFetch(`/api/users?${query.toString()}`, {
+          cache: 'no-store',
+          method: 'GET',
+        });
         const data = await response.json();
 
         if (!response.ok) {
@@ -55,12 +64,13 @@ export default function NewChatModal({
       }
     }
 
-    loadUsers();
+    const timer = setTimeout(loadUsers, 250);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [currentUserId]);
+  }, [currentUserId, searchQuery]);
 
   const filteredUsers = users.filter((user) => {
     const query = searchQuery.toLowerCase();
@@ -75,11 +85,10 @@ export default function NewChatModal({
     setError('');
 
     try {
-      const response = await fetch('/api/conversations', {
+      const response = await authFetch('/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: currentUserId,
           otherUserId: user.id,
         }),
       });

@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { ReactNode, useEffect, useState } from "react";
+import { ReactNode } from "react";
 import { Lock, MessageCircle, Shield } from "lucide-react";
 
 interface AuthLayoutProps {
@@ -15,12 +15,6 @@ export default function AuthLayout({
   subtitle,
   children,
 }: AuthLayoutProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
   return (
     <div className="relative flex min-h-screen bg-bg-main">
       {/* Left branding section */}
@@ -61,11 +55,7 @@ export default function AuthLayout({
 
       {/* Right form section */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 pb-20">
-        <div
-          className={`w-full max-w-md transition-opacity duration-300 ${
-            mounted ? "opacity-100 animate-fade-in" : "opacity-0"
-          }`}
-        >
+        <div className="w-full max-w-md opacity-100 animate-fade-in">
           <div className="flex items-center gap-2 mb-8">
             <MessageCircle size={28} className="text-primary" />
             <span className="text-2xl font-bold text-text-primary tracking-tight">

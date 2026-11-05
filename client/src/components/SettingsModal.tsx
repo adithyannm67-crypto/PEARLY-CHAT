@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Avatar from '@/components/Avatar';
 import ChatModal from '@/components/ChatModal';
+import { authFetch } from '@/lib/authFetch';
 import type { ChatUser } from '@/types/chat';
 
 interface SettingsModalProps {
@@ -30,13 +31,12 @@ export default function SettingsModal({
     setSaved('');
 
     try {
-      const response = await fetch('/api/users', {
+      const response = await authFetch('/api/users', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: currentUser.id,
           name: name.trim(),
-          username: username.trim(),
+          username: username.trim().toLowerCase(),
         }),
       });
       const data = await response.json();

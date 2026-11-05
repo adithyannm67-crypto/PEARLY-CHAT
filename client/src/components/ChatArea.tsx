@@ -12,7 +12,17 @@ import {
   SendHorizontal,
 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
+import { useSupabase } from '@/components/AuthProvider';
+import { authFetch } from '@/lib/authFetch';
 import type { Conversation, Message } from '@/types/chat';
+
+type RealtimeMessageRow = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+};
 
 interface ChatAreaProps {
   currentUserId: string | null;
@@ -60,6 +70,7 @@ function formatMessageTime(ts: string): string {
 }
 
 export default function ChatArea({ currentUserId, conversation, onBack }: ChatAreaProps) {
+  const { supabase } = useSupabase();
   const [messageInput, setMessageInput] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -77,10 +88,9 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
 
     async function loadMessages() {
       setLoading(true);
-      setError('');
 
       try {
-        const response = await fetch(
+        const response = await authFetch(
           `/api/messages?conversationId=${encodeURIComponent(conversationId!)}`,
           { cache: 'no-store' }
         );
@@ -111,6 +121,44 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
     };
   }, [conversationId]);
 
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const channel = supabase
+      .channel(`conversation-messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const row = payload.new as RealtimeMessageRow;
+          const incoming: Message = {
+            id: row.id,
+            conversationId: row.conversation_id,
+            senderId: row.sender_id,
+            content: row.content,
+            timestamp: row.created_at,
+            status: 'sent',
+          };
+
+          setLocalMessages((previous) =>
+            previous.some((message) => message.id === incoming.id)
+              ? previous
+              : [...previous, incoming]
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, supabase]);
+
   // Scroll to bottom when localMessages changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -126,12 +174,11 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
     setError('');
 
     try {
-      const response = await fetch('/api/messages', {
+      const response = await authFetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           conversationId,
-          senderId: currentUserId,
           content: trimmed,
         }),
       });
@@ -141,7 +188,12 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
         throw new Error(data.error || 'Failed to send message');
       }
 
-      setLocalMessages((prev) => [...prev, data.data.message]);
+      const sentMessage = data.data.message as Message;
+      setLocalMessages((previous) =>
+        previous.some((message) => message.id === sentMessage.id)
+          ? previous
+          : [...previous, sentMessage]
+      );
       setMessageInput('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send message');

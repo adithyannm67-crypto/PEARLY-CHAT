@@ -35,43 +35,19 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      let emailToUse = identifier.trim();
-
-      // Resolve username to email
-      if (!emailToUse.includes("@")) {
-        const response = await fetch("/api/auth/resolve-username", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ username: emailToUse }),
-        });
-
-        if (!response.ok) {
-          setError("Invalid username or email");
-          return;
-        }
-
-        const data = await response.json();
-        emailToUse = data.email;
-
-        if (!emailToUse) {
-          setError("Invalid username or email");
-          return;
-        }
-      }
-
-      // Call external server for authentication
       const response = await fetch(`${SERVER_URL}/api/auth/signin`, {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email: emailToUse, password }),
+        body: JSON.stringify({
+          identifier: identifier.trim(),
+          password,
+        }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (!response.ok || data.error) {
         setError(data.error || "Authentication failed");

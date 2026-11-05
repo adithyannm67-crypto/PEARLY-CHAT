@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import { useSupabase } from '@/components/AuthProvider';
+import { authFetch } from '@/lib/authFetch';
 import type { ChatUser, Conversation } from '@/types/chat';
 
 function getInitials(value: string): string {
@@ -20,7 +21,7 @@ function getInitials(value: string): string {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { session, signOut } = useSupabase();
+  const { session, loading: authLoading, signOut, supabase } = useSupabase();
   const userId = session?.user?.id ?? null;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -29,6 +30,12 @@ export default function Dashboard() {
   const [error, setError] = useState('');
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && !userId) {
+      router.replace('/auth/login');
+    }
+  }, [authLoading, router, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -40,10 +47,9 @@ export default function Dashboard() {
       setError('');
 
       try {
-        const response = await fetch(
-          `/api/conversations?userId=${encodeURIComponent(userId!)}`,
-          { cache: 'no-store' }
-        );
+        const response = await authFetch('/api/conversations', {
+          cache: 'no-store',
+        });
         const data = await response.json();
 
         if (!response.ok) {
@@ -71,6 +77,50 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const channel = supabase
+      .channel(`dashboard-messages:${userId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const row = payload.new as {
+            conversation_id: string;
+            content: string;
+            created_at: string;
+          };
+
+          setConversations((previous) => {
+            const index = previous.findIndex(
+              (conversation) => conversation.id === row.conversation_id
+            );
+
+            if (index === -1) return previous;
+
+            const next = [...previous];
+            next[index] = {
+              ...next[index],
+              lastMessage: row.content,
+              lastMessageTime: row.created_at,
+            };
+
+            return next.sort(
+              (a, b) =>
+                new Date(b.lastMessageTime).getTime() -
+                new Date(a.lastMessageTime).getTime()
+            );
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [supabase, userId]);
 
   const handleSelectConversation = (id: string) => {
     setSelectedConversationId(id);
@@ -154,6 +204,7 @@ export default function Dashboard() {
       >
         <div className="w-full h-full">
           <ChatArea
+            key={selectedConversationId ?? 'empty'}
             currentUserId={userId}
             conversation={selectedConversation}
             onBack={handleBack}

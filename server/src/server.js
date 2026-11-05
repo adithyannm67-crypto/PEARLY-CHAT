@@ -9,121 +9,77 @@ import messagesHandler from "./api/messages/route.js";
 import usersHandler from "./api/users/route.js";
 import * as responseHandler from "#utils/responseHandler.js";
 import handlePreflight from "#utils/handlePreflight.js";
+import parseCookies from "#utils/parseCookies.js";
 dotenv.config();
 
-// Secure cookie settings
-const COOKIE_SECURE = process.env.NODE_ENV === "production";
-const COOKIE_SAME_SITE = "lax";
+const isProduction = process.env.NODE_ENV === "production";
 
 const server = http.createServer(async (req, res) => {
   if (handlePreflight(req, res)) return;
 
-  console.log(req.method, req.url);
+  if (!isProduction) {
+    console.log(req.method, req.url);
+  }
 
-  const { pathname } = new URL(
-    req.url,
-    `http://${req.headers.host || "localhost"}`,
-  );
-  let output = null;
+  const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  req.cookies = parseCookies(req);
+
   try {
-    // Auth routes
-    if (req.method === "POST" && pathname === "/api/auth/signin") {
+    let output;
+
+    if (pathname === "/api/auth/signin") {
       output = await signinHandler(req, res);
-    } else if (req.method === "POST" && pathname === "/api/auth/signup") {
+    } else if (pathname === "/api/auth/signup") {
       output = await signupHandler(req, res);
-    } else if (req.method === "POST" && pathname === "/api/auth/logout") {
+    } else if (pathname === "/api/auth/logout") {
       output = await logoutHandler(req, res);
-    } else if (
-      (req.method === "GET" || req.method === "POST") &&
-      pathname === "/api/conversations"
-    ) {
+    } else if (pathname === "/api/conversations") {
       output = await conversationsHandler(req, res);
-    } else if (
-      (req.method === "GET" || req.method === "POST") &&
-      pathname === "/api/messages"
-    ) {
+    } else if (pathname === "/api/messages") {
       output = await messagesHandler(req, res);
-    } else if (
-      (req.method === "GET" || req.method === "PATCH") &&
-      pathname === "/api/users"
-    ) {
+    } else if (pathname === "/api/users") {
       output = await usersHandler(req, res);
     } else {
       responseHandler.notFoundResponse(res, "Route not found");
       return;
     }
 
-    responseHandler.successResponse(res, output);
-  } catch (error) {
-    console.log(error);
     if (!res.headersSent) {
-      responseHandler.errorResponse(res, error.message);
+      responseHandler.successResponse(res, output);
+    }
+  } catch (error) {
+    if (!isProduction) {
+      console.error(error);
+    }
+
+    if (!res.headersSent) {
+      const status = Number(error?.status) || 500;
+      const message =
+        status >= 500 && isProduction
+          ? "Internal server error"
+          : error?.message || "Internal server error";
+      responseHandler.errorResponse(res, message, status);
     }
   }
 });
-
-// Middleware to parse cookies
-server.on("request", (req, res) => {
-  const cookieHeader = req.headers.cookie;
-  if (cookieHeader) {
-    req.cookies = {};
-    cookieHeader.split(";").forEach((cookie) => {
-      const [key, value] = cookie.trim().split("=");
-      req.cookies[key] = value;
-    });
-  }
-});
-
-function createRequest(req, res) {
-  let body = "";
-
-  req.on("data", (chunk) => {
-    body += chunk;
-  });
-
-  req.on("end", () => {
-    try {
-      const data = JSON.parse(body);
-
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "http://localhost:3000",
-        "Access-Control-Allow-Credentials": "true",
-      });
-
-      res.end(
-        JSON.stringify({
-          data,
-          success: true,
-          message: "Submission received",
-        }),
-      );
-    } catch (error) {
-      res.writeHead(400, {
-        "Content-Type": "application/json",
-      });
-
-      res.end(
-        JSON.stringify({
-          success: false,
-          error: "Invalid JSON",
-        }),
-      );
-    }
-  });
-}
 
 const wss = new WebSocketServer({ server });
 
 wss.on("connection", (socket) => {
-  console.log("A client connected");
+  if (!isProduction) {
+    console.log("A client connected");
+  }
 
   socket.on("message", (message) => {
-    console.log("Received:", message.toString());
+    if (!isProduction) {
+      console.log("Received:", message.toString());
+    }
   });
 
   socket.on("close", () => {
-    console.log("A client disconnected");
+    if (!isProduction) {
+      console.log("A client disconnected");
+    }
   });
 });
 

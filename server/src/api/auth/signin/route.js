@@ -1,65 +1,53 @@
-import  parseBody  from "#utils/parseBody.js";
+import parseBody from "#utils/parseBody.js";
 import supabase from "#config/supabase.js";
+import HttpError from "#utils/HttpError.js";
+import setAuthCookies from "#utils/setAuthCookies.js";
+import checkRateLimit, { getClientKey } from "#utils/rateLimit.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    throw new Error("Method not allowed. Only POST requests are accepted.");
+    throw new HttpError(405, "Method not allowed");
   }
 
-  const { email, password } = await parseBody(req);
+  checkRateLimit(getClientKey(req, "signin"));
 
-  if (!email || !password) {
-    throw new Error("Email and password are required");
+  const { email, identifier, password } = await parseBody(req);
+  const loginIdentifier = (identifier || email || "").trim();
+
+  if (!loginIdentifier || !password) {
+    throw new HttpError(400, "Email or username and password are required");
   }
 
-  // Use Supabase signInWithPassword
+  let emailToUse = loginIdentifier;
+
+  if (!loginIdentifier.includes("@")) {
+    const username = loginIdentifier.toLowerCase();
+    const { data, error } = await supabase.rpc("resolve_email_by_username", {
+      p_username: username,
+    });
+
+    if (error || !data) {
+      throw new HttpError(401, "Invalid username or password");
+    }
+
+    emailToUse = data;
+  }
+
   const { data, error } = await supabase.auth.signInWithPassword({
-    email,
+    email: emailToUse,
     password,
   });
 
-  if (error) {
-    // Map common errors
-    let errorMessage = "Authentication failed";
-
-    switch (error.message) {
-      case "Invalid login credentials":
-        errorMessage = "Invalid email/username or password";
-        break;
-      case "Email not confirmed":
-        errorMessage = "Please confirm your email address before logging in";
-        break;
-      case "User not found":
-        errorMessage = "Invalid email/username or password";
-        break;
-      default:
-        errorMessage = error.message;
-    }
-
-    throw new Error(errorMessage);
+  if (error || !data.session) {
+    throw new HttpError(401, "Invalid username or password");
   }
 
-  // Set secure httpOnly cookie with session token
-  if (data.session) {
-    const cookieOptions = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      path: "/",
-    };
+  setAuthCookies(res, data.session);
 
-    // Set the token cookie
-    res.setHeader("Set-Cookie", [
-      `sb:token=${data.session.access_token}; HttpOnly; Secure; SameSite=lax; Max-Age=${cookieOptions.maxAge}; Path=/`,
-    ]);
-  }
-
-  // Return user session data
   return {
     success: true,
     message: "Signin successful!",
-    session: data.session,
     user: data.user,
+    session: data.session,
   };
-};
+}
