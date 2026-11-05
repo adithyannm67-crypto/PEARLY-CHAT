@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { WebSocketServer } from "ws";
 import signinHandler from "./api/auth/signin/route.js";
 import signupHandler from "./api/auth/signup/route.js";
+import logoutHandler from "./api/auth/logout/route.js";
 import conversationsHandler from "./api/conversations/route.js";
 import messagesHandler from "./api/messages/route.js";
 import usersHandler from "./api/users/route.js";
@@ -30,6 +31,8 @@ const server = http.createServer(async (req, res) => {
       output = await signinHandler(req, res);
     } else if (req.method === "POST" && pathname === "/api/auth/signup") {
       output = await signupHandler(req, res);
+    } else if (req.method === "POST" && pathname === "/api/auth/logout") {
+      output = await logoutHandler(req, res);
     } else if (
       (req.method === "GET" || req.method === "POST") &&
       pathname === "/api/conversations"

@@ -97,6 +97,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // Sign out function
   const signOut = async () => {
+    const serverUrl =
+      process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:5000';
+
+    try {
+      await fetch(`${serverUrl}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+    } catch {
+      // Still clear the browser session if the server is unreachable.
+    }
+
     const { error } = await supabase.auth.signOut();
     return { error };
   };
