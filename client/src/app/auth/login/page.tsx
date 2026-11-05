@@ -4,7 +4,7 @@ import React, { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "@/components/AuthLayout";
-import { useSupabase } from "@/components/AuthProvider";
+import { useSupabase } from "@/context/AuthProvider";
 import {
   User,
   Lock,

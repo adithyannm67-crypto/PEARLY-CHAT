@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     "A modern peer-to-peer messaging application. Connect, communicate, and collaborate with end-to-end encrypted messaging.",
 };
 
-import { AuthProvider } from '@/components/AuthProvider';
+import { AuthProvider } from '@/context/AuthProvider';
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

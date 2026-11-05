@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import { useSupabase } from '@/components/AuthProvider';
+import { useSupabase } from '@/context/AuthProvider';
 import { authFetch } from '@/lib/authFetch';
 import type { ChatUser, ConnectionRequest, Conversation } from '@/types/chat';
 import { useConversations } from '@/hooks/useConversations';

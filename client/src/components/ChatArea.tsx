@@ -12,7 +12,7 @@ import {
   SendHorizontal,
 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
-import { useSupabase } from '@/components/AuthProvider';
+import { useSupabase } from '@/context/AuthProvider';
 import { useDashboard } from '@/context/DashboardContext';
 import { authFetch } from '@/lib/authFetch';
 import type { Conversation, Message } from '@/types/chat';

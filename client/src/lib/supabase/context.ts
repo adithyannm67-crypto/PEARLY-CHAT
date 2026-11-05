@@ -7,6 +7,6 @@
  */
 
 // Export the useSupabase hook directly
-// The hook is defined in AuthProvider.tsx and provides Supabase client, session, 
+// The hook is defined in context/AuthProvider.tsx and provides Supabase client, session, 
 // and authentication functions (signIn, signUp, signOut, updateProfile).
-export { useSupabase } from '@/components/AuthProvider';
+export { useSupabase } from '@/context/AuthProvider';
