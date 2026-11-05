@@ -109,7 +109,7 @@ export async function listConnectionRequests(userId, accessToken, direction = "i
     .eq(userColumn, userId)
     .order("created_at", { ascending: true });
 
-  if (status && status !== "all") {
+  if (status && status !== "ALL") {
     query = query.eq("status", status);
   }
 

@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS public.connection_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sender_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   receiver_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  status TEXT NOT NULL DEFAULT 'pending',
+  status TEXT NOT NULL DEFAULT 'PENDING',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -48,7 +48,7 @@ CREATE INDEX IF NOT EXISTS connection_requests_receiver_status_idx
 -- Prevent duplicate pending requests in the same direction.
 CREATE UNIQUE INDEX IF NOT EXISTS connection_requests_pending_sender_receiver_idx
   ON public.connection_requests (sender_id, receiver_id)
-  WHERE status = 'pending';
+  WHERE status = 'PENDING';
 
 -- Prevent duplicate pending requests across both directions (handled in app too).
 CREATE UNIQUE INDEX IF NOT EXISTS connection_requests_pending_pair_idx
@@ -56,7 +56,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS connection_requests_pending_pair_idx
     LEAST(sender_id, receiver_id),
     GREATEST(sender_id, receiver_id)
   )
-  WHERE status = 'pending';
+  WHERE status = 'PENDING';
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
@@ -359,3 +359,4 @@ BEGIN
     WHEN duplicate_object THEN NULL;
   END;
 END $$;
+

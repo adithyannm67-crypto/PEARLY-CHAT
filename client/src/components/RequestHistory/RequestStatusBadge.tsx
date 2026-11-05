@@ -1,8 +1,8 @@
 const colors: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  accepted: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-100 text-gray-800',
+  PENDING: 'bg-yellow-100 text-yellow-800',
+  ACCEPTED: 'bg-green-100 text-green-800',
+  REJECTED: 'bg-red-100 text-red-800',
+  CANCELLED: 'bg-gray-100 text-gray-800',
 };
 
 export default function RequestStatusBadge({ status }: { status: string }) {

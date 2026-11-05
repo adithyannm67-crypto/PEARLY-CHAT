@@ -26,7 +26,7 @@ export interface Message {
   status: "sent" | "delivered" | "read";
 }
 
-export type ConnectionRequestStatus = "pending" | "accepted" | "rejected";
+export type ConnectionRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
 
 export interface ConnectionRequest {
   id: string;

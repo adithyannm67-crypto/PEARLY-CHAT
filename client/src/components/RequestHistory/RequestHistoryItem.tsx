@@ -3,6 +3,7 @@
 import Avatar from '@/components/Avatar';
 import RequestStatusBadge from './RequestStatusBadge';
 import type { ConnectionRequest } from '@/types/chat';
+import {CONNECTION_REQUEST_STATUS} from '@/types/database';
 
 export default function RequestHistoryItem({
   request,
@@ -33,16 +34,16 @@ export default function RequestHistoryItem({
       </div>
       <RequestStatusBadge status={request.status} />
       <div className="flex gap-2">
-        {incoming && request.status === 'pending' && (
+        {incoming && request.status === CONNECTION_REQUEST_STATUS.PENDING && (
           <>
             <button disabled={busy} onClick={() => onAccept?.(request.id)} className="text-xs px-2 py-1 rounded bg-primary text-white disabled:opacity-50">Accept</button>
             <button disabled={busy} onClick={() => onReject?.(request.id)} className="text-xs px-2 py-1 rounded border border-border-custom disabled:opacity-50">Reject</button>
           </>
         )}
-        {!incoming && request.status === 'pending' && (
+        {!incoming && request.status === CONNECTION_REQUEST_STATUS.PENDING && (
           <button disabled={busy} onClick={() => onCancel?.(request.id)} className="text-xs px-2 py-1 rounded border border-border-custom disabled:opacity-50">Cancel</button>
         )}
-        {request.status === 'accepted' && (
+        {request.status === CONNECTION_REQUEST_STATUS.ACCEPTED && (
           <button onClick={() => onViewChat?.(request)} className="text-xs px-2 py-1 rounded bg-primary text-white">View Chat</button>
         )}
       </div>
