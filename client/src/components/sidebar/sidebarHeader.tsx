@@ -1,19 +1,17 @@
-import { SquarePen, Settings, Search, LogOut, Bell, Trash2 } from 'lucide-react';
+import { SquarePen, Settings, LogOut, Bell } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 
-import type { ChatUser, Conversation } from '@/types/chat';
-type ActiveModal = 'new-chat' | 'settings' | null;
+import type { ChatUser, ConnectionRequest } from '@/types/chat';
 
 interface SidebarHeaderProps {
     currentUser: ChatUser | null;
     setRequestsOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    connectionRequests: any[];
-    sentConnectionRequests: any[];
+    connectionRequests: ConnectionRequest[];
+    sentConnectionRequests: ConnectionRequest[];
     handleLogout: () => void;
-    setActiveModal: (modal: ActiveModal) => void;
-    activeModal: ActiveModal;
+    setActiveModal: (modal: 'new-chat' | 'settings' | null) => void;
 }
-const SidebarHeader = ({ currentUser, setRequestsOpen, connectionRequests, sentConnectionRequests, handleLogout, setActiveModal, activeModal }: SidebarHeaderProps) => {
+const SidebarHeader = ({ currentUser, setRequestsOpen, connectionRequests, sentConnectionRequests, handleLogout, setActiveModal }: SidebarHeaderProps) => {
     return (<header className="h-16 bg-bg-secondary border-b border-border-custom px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
             <Avatar

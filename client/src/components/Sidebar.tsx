@@ -19,18 +19,12 @@ export default function Sidebar() {
     currentUser,
     conversations,
     connectionRequests,
-    connectionRequestsError,
-    connectionRequestsLoading,
     sentConnectionRequests,
-    sentConnectionRequestsError,
-    sentConnectionRequestsLoading,
     requestHistory,
     loading,
     error,
     selectedConversationId,
     handleSelectConversation,
-    handleAcceptRequest,
-    handleRejectRequest,
     handleDeleteConversation,
     handleUserUpdated,
     handleLogout,
@@ -38,10 +32,6 @@ export default function Sidebar() {
     userId,
     requestsOpen,
     setRequestsOpen,
-    requestTab,
-    setRequestTab,
-    historyTab,
-    setHistoryTab,
     activeModal,
     setActiveModal,
   } = useDashboard();
@@ -72,7 +62,6 @@ export default function Sidebar() {
         sentConnectionRequests={sentConnectionRequests}
         handleLogout={handleLogout}
         setActiveModal={setActiveModal}
-        activeModal={activeModal}
       />
       <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
