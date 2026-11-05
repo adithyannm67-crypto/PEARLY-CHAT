@@ -6,6 +6,7 @@ import type { ConnectionRequest } from '@/types/chat';
 
 export default function RequestHistoryItem({
   request,
+  userId,
   onViewChat,
   onAccept,
   onReject,
@@ -13,14 +14,14 @@ export default function RequestHistoryItem({
   busy,
 }: {
   request: ConnectionRequest;
+  userId?: string | null;
   onViewChat?: (request: ConnectionRequest) => void;
   onAccept?: (requestId: string) => void;
   onReject?: (requestId: string) => void;
   onCancel?: (requestId: string) => void;
   busy?: boolean;
 }) {
-  const direction = (request as any).direction ?? 'incoming';
-  const incoming = direction === 'incoming';
+  const incoming = userId ? request.receiverId === userId : (request as any).direction === 'incoming';
 
   return (
     <div className="flex items-center gap-3 p-3 border-b border-border-custom/40">

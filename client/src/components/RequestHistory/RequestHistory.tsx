@@ -16,7 +16,7 @@ export default function RequestHistory({ userId, onViewChat }: { userId: string 
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const filtered = requests.filter((request) => {
-    const incoming = (request as any).direction === 'incoming';
+    const incoming = request.receiverId === userId;
     return activeTab === 'received' ? incoming : !incoming;
   });
 
@@ -75,6 +75,7 @@ export default function RequestHistory({ userId, onViewChat }: { userId: string 
         <RequestHistoryItem
           key={request.id}
           request={request}
+          userId={userId}
           busy={busyId === request.id}
           onViewChat={onViewChat}
           onAccept={handleAccept}
