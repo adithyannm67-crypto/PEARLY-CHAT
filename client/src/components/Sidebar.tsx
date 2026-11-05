@@ -185,65 +185,12 @@ export default function Sidebar({
 
       {requestsOpen && (
         <div className="absolute top-16 left-0 right-0 z-20 mx-3 rounded-lg border border-border-custom bg-bg-secondary shadow-lg">
-          <div className="flex gap-2 p-2 border-b border-border-custom/40">
-            <button
-              type="button"
-              onClick={() => setRequestTab('incoming')}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                requestTab === 'incoming'
-                  ? 'bg-primary text-white'
-                  : 'text-text-secondary hover:bg-surface'
-              }`}
-            >
-              Incoming ({connectionRequests.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setRequestTab('sent')}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                requestTab === 'sent'
-                  ? 'bg-primary text-white'
-                  : 'text-text-secondary hover:bg-surface'
-              }`}
-            >
-              Sent ({sentConnectionRequests.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setRequestTab('history')}
-              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                requestTab === 'history'
-                  ? 'bg-primary text-white'
-                  : 'text-text-secondary hover:bg-surface'
-              }`}
-            >
-              History ({requestHistory.length})
-            </button>
-          </div>
           <div className="max-h-64 overflow-y-auto">
-            {requestTab === 'incoming' ? (
-              <ConnectionRequests
-                requests={connectionRequests}
-                error={connectionRequestsError}
-                loading={connectionRequestsLoading}
-                onAccept={onAcceptRequest}
-                onReject={onRejectRequest}
-              />
-            ) : requestTab === 'sent' ? (
-              <ConnectionRequests
-                requests={sentConnectionRequests}
-                error={sentConnectionRequestsError}
-                loading={sentConnectionRequestsLoading}
-                mode="outgoing"
-                title="Sent requests"
-              />
-            ) : (
-              <ConnectionRequests
-                requests={requestHistory}
-                mode="history"
-                title="Request history"
-              />
-            )}
+            <ConnectionRequests
+              requests={requestHistory}
+              mode="history"
+              title="Requests"
+            />
           </div>
         </div>
       )}
