@@ -23,7 +23,7 @@ export default function ConnectionRequests({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
 
-  if (!loading && requests.length === 0 && !error) return null;
+  // Always show the section so incoming requests are discoverable.
 
   const handleAction = async (
     requestId: string,
@@ -71,6 +71,11 @@ export default function ConnectionRequests({
       )}
 
       <div className="space-y-2 max-h-52 overflow-y-auto">
+        {!loading && !error && requests.length === 0 && (
+          <p className="px-1 pb-1 text-xs text-text-secondary">
+            No pending requests
+          </p>
+        )}
         {requests.map((request) => (
           <div
             key={request.id}
