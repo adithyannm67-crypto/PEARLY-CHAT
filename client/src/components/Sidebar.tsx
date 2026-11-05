@@ -61,7 +61,7 @@ export default function Sidebar() {
     : [...connectionRequests, ...sentConnectionRequests];
 
   return (
-    <aside className="relative flex flex-col h-full bg-bg-secondary select-none">
+    <aside className="relative flex flex-col h-full bg-bg-secondary select-none md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom">
       <header className="h-16 bg-bg-secondary border-b border-border-custom px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <Avatar

@@ -1,13 +1,15 @@
-import { useEffect } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database';
+import { useEffect } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 
-import type { Conversation } from '@/types/chat';
+import type { Conversation } from "@/types/chat";
 
 type RealtimeHandlers = {
   userId: string | null;
   supabase: SupabaseClient<Database>;
-  setConversations: (value: Conversation[] | ((prev: Conversation[]) => Conversation[])) => void;
+  setConversations: (
+    value: Conversation[] | ((prev: Conversation[]) => Conversation[]),
+  ) => void;
   loadConversations: () => void | Promise<void>;
   loadConnectionRequests: () => void | Promise<void>;
   loadSentConnectionRequests: () => void | Promise<void>;
@@ -29,23 +31,23 @@ export function useDashboardRealtime({
     const channel = supabase
       .channel(`dashboard:${userId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'conversation_participants',
+          event: "*",
+          schema: "public",
+          table: "conversation_participants",
           filter: `user_id=eq.${userId}`,
         },
         () => {
           void loadConversations();
-        }
+        },
       )
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
         },
         (payload) => {
           const row = payload.new as {
@@ -56,7 +58,7 @@ export function useDashboardRealtime({
 
           setConversations((previous) => {
             const index = previous.findIndex(
-              (conversation) => conversation.id === row.conversation_id
+              (conversation) => conversation.id === row.conversation_id,
             );
 
             if (index === -1) return previous;
@@ -71,26 +73,56 @@ export function useDashboardRealtime({
             return next.sort(
               (a, b) =>
                 new Date(b.lastMessageTime).getTime() -
-                new Date(a.lastMessageTime).getTime()
+                new Date(a.lastMessageTime).getTime(),
             );
           });
-        }
+        },
       )
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'connection_requests',
+          event: "*",
+          schema: "public",
+          table: "connection_requests",
           filter: `receiver_id=eq.${userId}`,
         },
-        () => {
+        (payload) => {
+          console.log(
+            `[Realtime:${userId}] Incoming request event:`,
+            payload,
+          );
+
           void loadConnectionRequests();
           void loadSentConnectionRequests();
           void loadRequestHistory?.();
-        }
+        },
       )
-      .subscribe();
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "connection_requests",
+          filter: `sender_id=eq.${userId}`,
+        },
+        (payload) => {
+          console.log(
+            `[Realtime:${userId}] Outgoing request event:`,
+            payload,
+          );
+
+          void loadConnectionRequests();
+          void loadSentConnectionRequests();
+          void loadRequestHistory?.();
+        },
+      )
+      .subscribe((status, error) => {
+        console.log(`[Realtime:${userId}] Status:`, status);
+
+        if (error) {
+          console.error(`[Realtime:${userId}] Error:`, error);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

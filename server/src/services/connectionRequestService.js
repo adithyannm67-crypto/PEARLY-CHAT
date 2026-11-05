@@ -152,6 +152,11 @@ export async function listConnectionRequests(userId, accessToken, direction = "i
 export async function createConnectionRequest(userId, receiverId, accessToken) {
   const db = supabaseAuth(accessToken);
 
+  console.log("[Connection Request] Creating request:", {
+    senderId: userId,
+    receiverId,
+  });
+
   if (await findExistingConversation(userId, receiverId, accessToken)) {
     throw new HttpError(409, "You are already connected with this user");
   }
@@ -197,11 +202,18 @@ export async function createConnectionRequest(userId, receiverId, accessToken) {
     throw error;
   }
 
+  console.log("[Connection Request] Database response:", data);
+
   return requestWithProfile(data, receiverId, accessToken);
 }
 
 export async function acceptConnectionRequest(userId, requestId, accessToken) {
   const db = supabaseAuth(accessToken);
+
+  console.log("[Connection Request] Accepting:", {
+    userId,
+    requestId,
+  });
 
   const { data: request, error } = await db
     .from("connection_requests")
@@ -236,6 +248,8 @@ export async function acceptConnectionRequest(userId, requestId, accessToken) {
     .maybeSingle();
 
   if (updateError) throw updateError;
+
+  console.log("[Connection Request] Updated:", updated);
 
   if (!updated) {
     throw new HttpError(409, "Connection request is no longer pending");

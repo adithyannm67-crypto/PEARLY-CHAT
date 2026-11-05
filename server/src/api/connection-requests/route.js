@@ -45,6 +45,11 @@ export default async function handler(req) {
     const body = await parseBody(req);
     const { receiverId } = body;
 
+    console.log("[Connection Request] API POST:", {
+      senderId: user.id,
+      receiverId,
+    });
+
     if (!isUuid(receiverId)) {
       throw new HttpError(400, "A valid receiverId is required");
     }
