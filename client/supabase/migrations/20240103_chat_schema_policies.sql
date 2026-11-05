@@ -45,6 +45,19 @@ CREATE INDEX IF NOT EXISTS messages_sender_idx
 CREATE INDEX IF NOT EXISTS connection_requests_receiver_status_idx
   ON public.connection_requests (receiver_id, status);
 
+-- Prevent duplicate pending requests in the same direction.
+CREATE UNIQUE INDEX IF NOT EXISTS connection_requests_pending_sender_receiver_idx
+  ON public.connection_requests (sender_id, receiver_id)
+  WHERE status = 'pending';
+
+-- Prevent duplicate pending requests across both directions (handled in app too).
+CREATE UNIQUE INDEX IF NOT EXISTS connection_requests_pending_pair_idx
+  ON public.connection_requests (
+    LEAST(sender_id, receiver_id),
+    GREATEST(sender_id, receiver_id)
+  )
+  WHERE status = 'pending';
+
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
@@ -331,11 +344,17 @@ BEGIN
   );
 END $$;
 
--- Enable Realtime message inserts.
+-- Enable Realtime inserts/updates needed by the dashboard.
 DO $$
 BEGIN
   BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.messages;
+  EXCEPTION
+    WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.connection_requests;
   EXCEPTION
     WHEN duplicate_object THEN NULL;
   END;

@@ -3,18 +3,22 @@
 import { useState } from 'react';
 import { SquarePen, Settings, Search, LogOut } from 'lucide-react';
 import Avatar from '@/components/Avatar';
+import ConnectionRequests from '@/components/ConnectionRequests';
 import NewChatModal from '@/components/NewChatModal';
 import SettingsModal from '@/components/SettingsModal';
-import type { ChatUser, Conversation } from '@/types/chat';
+import type { ChatUser, ConnectionRequest, Conversation } from '@/types/chat';
 
 interface SidebarProps {
   currentUser: ChatUser | null;
   conversations: Conversation[];
+  connectionRequests: ConnectionRequest[];
+  connectionRequestsError: string;
   loading: boolean;
   error: string;
   selectedConversationId: string | null;
   onSelectConversation: (id: string) => void;
-  onConversationCreated: (conversation: Conversation) => void;
+  onAcceptRequest: (requestId: string) => Promise<void>;
+  onRejectRequest: (requestId: string) => Promise<void>;
   onUserUpdated: (user: ChatUser) => void;
   onLogout: () => void;
 }
@@ -59,11 +63,14 @@ function formatTime(timestamp: string): string {
 export default function Sidebar({
   currentUser,
   conversations,
+  connectionRequests,
+  connectionRequestsError,
   loading,
   error,
   selectedConversationId,
   onSelectConversation,
-  onConversationCreated,
+  onAcceptRequest,
+  onRejectRequest,
   onUserUpdated,
   onLogout,
 }: SidebarProps) {
@@ -146,7 +153,15 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* 3. Conversation list */}
+      {/* 3. Pending connection requests */}
+      <ConnectionRequests
+        requests={connectionRequests}
+        error={connectionRequestsError}
+        onAccept={onAcceptRequest}
+        onReject={onRejectRequest}
+      />
+
+      {/* 4. Conversation list */}
       <div className="flex-1 overflow-y-auto">
         {loading && (
           <div className="p-6 text-center text-sm text-text-secondary">
@@ -216,7 +231,6 @@ export default function Sidebar({
         <NewChatModal
           currentUserId={currentUser.id}
           onClose={() => setActiveModal(null)}
-          onConversationCreated={onConversationCreated}
         />
       )}
 

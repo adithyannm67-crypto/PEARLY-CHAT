@@ -25,3 +25,14 @@ export interface Message {
   timestamp: string;
   status: "sent" | "delivered" | "read";
 }
+
+export type ConnectionRequestStatus = "pending" | "accepted" | "rejected";
+
+export interface ConnectionRequest {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  status: ConnectionRequestStatus;
+  createdAt: string;
+  user: ChatUser;
+}

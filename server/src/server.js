@@ -5,6 +5,7 @@ import signinHandler from "./api/auth/signin/route.js";
 import signupHandler from "./api/auth/signup/route.js";
 import logoutHandler from "./api/auth/logout/route.js";
 import conversationsHandler from "./api/conversations/route.js";
+import connectionRequestsHandler from "./api/connection-requests/route.js";
 import messagesHandler from "./api/messages/route.js";
 import usersHandler from "./api/users/route.js";
 import * as responseHandler from "#utils/responseHandler.js";
@@ -35,6 +36,8 @@ const server = http.createServer(async (req, res) => {
       output = await logoutHandler(req, res);
     } else if (pathname === "/api/conversations") {
       output = await conversationsHandler(req, res);
+    } else if (pathname === "/api/connection-requests") {
+      output = await connectionRequestsHandler(req, res);
     } else if (pathname === "/api/messages") {
       output = await messagesHandler(req, res);
     } else if (pathname === "/api/users") {

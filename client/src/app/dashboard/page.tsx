@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import { useSupabase } from '@/components/AuthProvider';
 import { authFetch } from '@/lib/authFetch';
-import type { ChatUser, Conversation } from '@/types/chat';
+import type { ChatUser, ConnectionRequest, Conversation } from '@/types/chat';
 
 function getInitials(value: string): string {
   const source = value.trim();
@@ -25,9 +25,11 @@ export default function Dashboard() {
   const userId = session?.user?.id ?? null;
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
   const [currentUser, setCurrentUser] = useState<ChatUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [connectionRequestsError, setConnectionRequestsError] = useState('');
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
 
@@ -37,46 +39,65 @@ export default function Dashboard() {
     }
   }, [authLoading, router, userId]);
 
-  useEffect(() => {
+  const loadConversations = useCallback(async () => {
     if (!userId) return;
 
-    let cancelled = false;
+    setLoading(true);
+    setError('');
 
-    async function loadConversations() {
-      setLoading(true);
-      setError('');
+    try {
+      const response = await authFetch('/api/conversations', {
+        cache: 'no-store',
+      });
+      const data = await response.json();
 
-      try {
-        const response = await authFetch('/api/conversations', {
-          cache: 'no-store',
-        });
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to load conversations');
-        }
-
-        if (!cancelled) {
-          setConversations(data.data?.conversations ?? []);
-          setCurrentUser(data.data?.currentUser ?? null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load conversations');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load conversations');
       }
+
+      setConversations(data.data?.conversations ?? []);
+      setCurrentUser(data.data?.currentUser ?? null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Failed to load conversations'
+      );
+    } finally {
+      setLoading(false);
     }
-
-    loadConversations();
-
-    return () => {
-      cancelled = true;
-    };
   }, [userId]);
+
+  const loadConnectionRequests = useCallback(async () => {
+    if (!userId) return;
+
+    setConnectionRequestsError('');
+
+    try {
+      const response = await authFetch(
+        '/api/connection-requests?direction=incoming',
+        { cache: 'no-store' }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load connection requests');
+      }
+
+      setConnectionRequests(data.data?.requests ?? []);
+    } catch (err) {
+      setConnectionRequestsError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to load connection requests'
+      );
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      void loadConversations();
+      void loadConnectionRequests();
+    });
+  }, [loadConnectionRequests, loadConversations]);
 
   useEffect(() => {
     if (!userId) return;
@@ -115,12 +136,52 @@ export default function Dashboard() {
           });
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'connection_requests',
+          filter: `receiver_id=eq.${userId}`,
+        },
+        () => {
+          loadConnectionRequests();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'connection_requests',
+          filter: `receiver_id=eq.${userId}`,
+        },
+        () => {
+          loadConnectionRequests();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'connection_requests',
+          filter: `sender_id=eq.${userId}`,
+        },
+        (payload) => {
+          const row = payload.new as { status?: string };
+
+          if (row.status === 'accepted') {
+            loadConversations();
+          }
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, userId]);
+  }, [loadConnectionRequests, loadConversations, supabase, userId]);
 
   const handleSelectConversation = (id: string) => {
     setSelectedConversationId(id);
@@ -143,6 +204,44 @@ export default function Dashboard() {
     ]);
     setSelectedConversationId(conversation.id);
     setShowChat(true);
+  };
+
+  const handleAcceptRequest = async (requestId: string) => {
+    const response = await authFetch('/api/connection-requests', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, action: 'accept' }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to accept connection request');
+    }
+
+    setConnectionRequests((prev) =>
+      prev.filter((request) => request.id !== requestId)
+    );
+
+    if (data.data?.conversation) {
+      handleConversationCreated(data.data.conversation);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    const response = await authFetch('/api/connection-requests', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, action: 'reject' }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to decline connection request');
+    }
+
+    setConnectionRequests((prev) =>
+      prev.filter((request) => request.id !== requestId)
+    );
   };
 
   const handleUserUpdated = (user: ChatUser) => {
@@ -187,11 +286,14 @@ export default function Dashboard() {
           <Sidebar
             currentUser={displayCurrentUser}
             conversations={displayConversations}
+            connectionRequests={userId ? connectionRequests : []}
+            connectionRequestsError={userId ? connectionRequestsError : ''}
             loading={displayLoading}
             error={displayError}
             selectedConversationId={selectedConversationId}
             onSelectConversation={handleSelectConversation}
-            onConversationCreated={handleConversationCreated}
+            onAcceptRequest={handleAcceptRequest}
+            onRejectRequest={handleRejectRequest}
             onUserUpdated={handleUserUpdated}
             onLogout={handleLogout}
           />

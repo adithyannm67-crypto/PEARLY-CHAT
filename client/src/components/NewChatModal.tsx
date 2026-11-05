@@ -5,23 +5,22 @@ import { Search } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 import ChatModal from '@/components/ChatModal';
 import { authFetch } from '@/lib/authFetch';
-import type { ChatUser, Conversation } from '@/types/chat';
+import type { ChatUser } from '@/types/chat';
 
 interface NewChatModalProps {
   currentUserId: string;
   onClose: () => void;
-  onConversationCreated: (conversation: Conversation) => void;
 }
 
 export default function NewChatModal({
   currentUserId,
   onClose,
-  onConversationCreated,
 }: NewChatModalProps) {
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [creatingId, setCreatingId] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -80,29 +79,31 @@ export default function NewChatModal({
     );
   });
 
-  const handleStartChat = async (user: ChatUser) => {
+  const handleSendRequest = async (user: ChatUser) => {
     setCreatingId(user.id);
     setError('');
+    setSentTo(null);
 
     try {
-      const response = await authFetch('/api/conversations', {
+      const response = await authFetch('/api/connection-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          otherUserId: user.id,
+          receiverId: user.id,
         }),
       });
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to start conversation');
+        throw new Error(data.error || 'Failed to send connection request');
       }
 
-      onConversationCreated(data.data.conversation);
-      onClose();
+      setSentTo(user.id);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to start conversation'
+        err instanceof Error
+          ? err.message
+          : 'Failed to send connection request'
       );
     } finally {
       setCreatingId(null);
@@ -128,6 +129,12 @@ export default function NewChatModal({
 
         {error && <p className="text-error text-sm mt-3">{error}</p>}
 
+        {sentTo && (
+          <p className="text-online text-sm mt-3">
+            Connection request sent. You can start chatting once they accept.
+          </p>
+        )}
+
         <div className="mt-3 max-h-80 overflow-y-auto -mx-2">
           {loading && (
             <p className="p-4 text-center text-sm text-text-secondary">
@@ -140,8 +147,8 @@ export default function NewChatModal({
               <button
                 key={user.id}
                 type="button"
-                disabled={creatingId !== null}
-                onClick={() => handleStartChat(user)}
+                disabled={creatingId !== null || sentTo === user.id}
+                onClick={() => handleSendRequest(user)}
                 className="w-full text-left px-2 py-2.5 flex items-center gap-3 rounded-lg hover:bg-surface/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <Avatar initials={user.avatar} size="md" />
@@ -154,7 +161,10 @@ export default function NewChatModal({
                   </p>
                 </div>
                 {creatingId === user.id && (
-                  <span className="text-xs text-text-secondary">Starting...</span>
+                  <span className="text-xs text-text-secondary">Sending...</span>
+                )}
+                {sentTo === user.id && (
+                  <span className="text-xs text-online">Request sent</span>
                 )}
               </button>
             ))}
