@@ -13,6 +13,7 @@ interface SidebarProps {
   conversations: Conversation[];
   connectionRequests: ConnectionRequest[];
   connectionRequestsError: string;
+  connectionRequestsLoading?: boolean;
   loading: boolean;
   error: string;
   selectedConversationId: string | null;
@@ -65,6 +66,7 @@ export default function Sidebar({
   conversations,
   connectionRequests,
   connectionRequestsError,
+  connectionRequestsLoading,
   loading,
   error,
   selectedConversationId,
@@ -157,6 +159,7 @@ export default function Sidebar({
       <ConnectionRequests
         requests={connectionRequests}
         error={connectionRequestsError}
+        loading={connectionRequestsLoading}
         onAccept={onAcceptRequest}
         onReject={onRejectRequest}
       />

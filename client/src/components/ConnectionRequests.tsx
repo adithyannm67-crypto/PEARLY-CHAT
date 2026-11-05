@@ -8,6 +8,7 @@ import type { ConnectionRequest } from '@/types/chat';
 interface ConnectionRequestsProps {
   requests: ConnectionRequest[];
   error?: string;
+  loading?: boolean;
   onAccept: (requestId: string) => Promise<void>;
   onReject: (requestId: string) => Promise<void>;
 }
@@ -15,13 +16,14 @@ interface ConnectionRequestsProps {
 export default function ConnectionRequests({
   requests,
   error,
+  loading,
   onAccept,
   onReject,
 }: ConnectionRequestsProps) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState('');
 
-  if (requests.length === 0 && !error) return null;
+  if (!loading && requests.length === 0 && !error) return null;
 
   const handleAction = async (
     requestId: string,
@@ -58,6 +60,11 @@ export default function ConnectionRequests({
         )}
       </div>
 
+      {loading && (
+        <p className="px-1 pb-2 text-xs text-text-secondary">
+          Loading requests...
+        </p>
+      )}
       {error && <p className="px-1 pb-2 text-xs text-error">{error}</p>}
       {actionError && (
         <p className="px-1 pb-2 text-xs text-error">{actionError}</p>

@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [connectionRequestsError, setConnectionRequestsError] = useState('');
+  const [connectionRequestsLoading, setConnectionRequestsLoading] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
 
@@ -70,6 +71,7 @@ export default function Dashboard() {
     if (!userId) return;
 
     setConnectionRequestsError('');
+    setConnectionRequestsLoading(true);
 
     try {
       const response = await authFetch(
@@ -89,6 +91,8 @@ export default function Dashboard() {
           ? err.message
           : 'Failed to load connection requests'
       );
+    } finally {
+      setConnectionRequestsLoading(false);
     }
   }, [userId]);
 
@@ -288,6 +292,7 @@ export default function Dashboard() {
             conversations={displayConversations}
             connectionRequests={userId ? connectionRequests : []}
             connectionRequestsError={userId ? connectionRequestsError : ''}
+            connectionRequestsLoading={userId ? connectionRequestsLoading : false}
             loading={displayLoading}
             error={displayError}
             selectedConversationId={selectedConversationId}
