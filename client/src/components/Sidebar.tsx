@@ -92,7 +92,7 @@ export default function Sidebar({
   const [activeModal, setActiveModal] = useState<'new-chat' | 'settings' | null>(
     null
   );
-  const [requestsOpen, setRequestsOpen] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(true);
   const [requestTab, setRequestTab] = useState<'incoming' | 'sent' | 'history'>('incoming');
 
   const filteredConversations = conversations.filter((conversation) => {
