@@ -1,6 +1,6 @@
 /**
  * Supabase Database Types
- * Auto-generated for the profiles table and auth.users reference.
+ * Auto-generated for the public users table and chat tables.
  * Keep in sync with actual Supabase SQL migrations.
  * 
  * These types are inferred from the Supabase schema via the supabase types generator.
@@ -12,70 +12,44 @@
 export type Database = {
   public: {
     Tables: {
-      profiles: {
-        Row: {
-          id: string;
-          name: string;
-          username: string;
-          created_at: string;
-        };
-        Insert: {
-          id: string;
-          name: string;
-          username: string;
-          created_at?: string;
-        };
-        Update: {
-          id?: string;
-          name?: string;
-          username?: string;
-          created_at?: string;
-        };
-      };
-      // auth.users is managed by Supabase, referenced for foreign keys
       users: {
         Row: {
           id: string;
           email: string | null;
-          encrypted_password: string;
-          raw_user_meta_data: Record<string, unknown> | null;
+          username: string | null;
+          avatar_url: string | null;
+          full_name: string | null;
           created_at: string;
-          last_sign_in_at: string | null;
         };
         Insert: {
           id: string;
-          email: string;
-          password: string;
-          raw_user_meta_data?: Record<string, unknown>;
-          email_confirmed_at?: string;
-          last_sign_in_at?: string;
+          email?: string | null;
+          username?: string | null;
+          avatar_url?: string | null;
+          full_name?: string | null;
+          created_at?: string;
         };
         Update: {
           id?: string;
-          email?: string;
-          raw_user_meta_data?: Record<string, unknown>;
+          email?: string | null;
+          username?: string | null;
+          avatar_url?: string | null;
+          full_name?: string | null;
+          created_at?: string;
         };
       };
     };
-    Enums: {};
-    Composites: {};
+    Enums: Record<string, never>;
+    Composites: Record<string, never>;
   };
 };
 
-// Convenience type for profiles table row
-export type Profile = {
-  id: string;
-  name: string;
-  username: string;
-  created_at: string;
-};
-
-// Convenience type for user profile with auth info
+// Convenience type for a public users table row
 export type UserProfile = {
   id: string;
   email: string | null;
   username: string | null;
+  avatar_url: string | null;
   full_name: string | null;
   created_at: string;
-  last_sign_in_at: string | null;
 };

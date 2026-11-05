@@ -15,11 +15,11 @@ async function verifyAuthToken(token) {
   return { user: data.user, error: null };
 }
 
-// Check if user has profile
+// Check if the user exists in the public users table
 async function checkUserProfileExists(userId) {
   try {
     const { data, error } = await supabase
-      .from("profiles")
+      .from("users")
       .select("id")
       .eq("id", userId)
       .single();

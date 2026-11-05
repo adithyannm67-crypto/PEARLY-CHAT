@@ -18,11 +18,11 @@ export async function POST(request: Request) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
 
-    // Query the profiles table to find the user by username
+    // Query the users table to find the user by username
     // This is a secure server-side query that doesn't expose all emails
     const { data, error } = await supabase
-      .from('profiles')
-      .select('email, username, name')
+      .from('users')
+      .select('email, username, full_name')
       .eq('username', username.toLowerCase().trim()) // Normalize username
       .single();
 

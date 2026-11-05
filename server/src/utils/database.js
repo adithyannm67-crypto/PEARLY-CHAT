@@ -1,9 +1,9 @@
 import supabase from '../config/supabase.js';
 
-// Profile-related queries
+// User-related queries
 export const getUserProfile = async (userId) => {
   const { data, error } = await supabase
-    .from('profiles')
+    .from('users')
     .select('*')
     .eq('id', userId)
     .single();
@@ -13,9 +13,16 @@ export const getUserProfile = async (userId) => {
 };
 
 export const updateUserProfile = async (userId, updates) => {
+  const payload = { ...updates };
+
+  if (payload.name !== undefined) {
+    payload.full_name = payload.name;
+    delete payload.name;
+  }
+
   const { data, error } = await supabase
-    .from('profiles')
-    .update(updates)
+    .from('users')
+    .update(payload)
     .eq('id', userId)
     .select()
     .single();
@@ -49,7 +56,7 @@ export const getConnectionRequests = async (userId) => {
 export const getPendingConnectionRequests = async (userId) => {
   const { data, error } = await supabase
     .from('connection_requests')
-    .select('*, sender:profiles!connection_requests_sender_id_fkey!(*)')
+    .select('*, sender:users!connection_requests_sender_id_fkey(*)')
     .eq('receiver_id', userId)
     .eq('status', 'pending');
 
@@ -61,7 +68,7 @@ export const getPendingConnectionRequests = async (userId) => {
 export const getMessages = async (conversationId) => {
   const { data, error } = await supabase
     .from('messages')
-    .select('*, sender:profiles!messages_sender_id_fkey!(*)')
+    .select('*, sender:users!messages_sender_id_fkey(*)')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true });
 

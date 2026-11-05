@@ -42,13 +42,13 @@ export default function SettingsModal({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to update profile');
+        throw new Error(data.error || 'Failed to update user');
       }
 
       onUserUpdated(data.data.user);
-      setSaved('Profile updated');
+      setSaved('User updated');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update profile');
+      setError(err instanceof Error ? err.message : 'Failed to update user');
     } finally {
       setSaving(false);
     }
