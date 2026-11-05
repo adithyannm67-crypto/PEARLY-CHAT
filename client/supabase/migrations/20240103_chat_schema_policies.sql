@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS public.connection_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.conversation_participants
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
 CREATE INDEX IF NOT EXISTS conversation_participants_user_idx
   ON public.conversation_participants (user_id);
 
@@ -292,6 +295,41 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+-- SECURITY DEFINER helpers must be owned by the table owner. Otherwise RLS is
+-- evaluated with the caller's privileges and inserts still fail with 42501.
+DO $$
+DECLARE
+  v_owner NAME;
+BEGIN
+  SELECT pg_get_userbyid(relowner)
+  INTO v_owner
+  FROM pg_class
+  WHERE oid = 'public.conversations'::regclass;
+
+  EXECUTE format(
+    'ALTER FUNCTION public.is_conversation_participant(UUID, UUID) OWNER TO %I',
+    v_owner
+  );
+  EXECUTE format(
+    'ALTER FUNCTION public.get_or_create_direct_conversation(UUID) OWNER TO %I',
+    v_owner
+  );
+
+  SELECT pg_get_userbyid(relowner)
+  INTO v_owner
+  FROM pg_class
+  WHERE oid = 'public.users'::regclass;
+
+  EXECUTE format(
+    'ALTER FUNCTION public.resolve_email_by_username(TEXT) OWNER TO %I',
+    v_owner
+  );
+  EXECUTE format(
+    'ALTER FUNCTION public.handle_new_user() OWNER TO %I',
+    v_owner
+  );
+END $$;
 
 -- Enable Realtime message inserts.
 DO $$

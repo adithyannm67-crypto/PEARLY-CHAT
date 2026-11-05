@@ -5,6 +5,37 @@
 > migration `client/supabase/migrations/20240103_chat_schema_policies.sql` still
 > needs to be applied before authenticated flows can be fully verified.
 
+## Apply the Migration First
+
+The connected Supabase project does not currently have the RPCs from this
+migration. Probing `resolve_email_by_username`, `get_or_create_direct_conversation`,
+and `is_conversation_participant` returns `PGRST202`, so `POST /api/conversations`
+cannot use the secure RPC yet.
+
+1. Open the Supabase Dashboard for this project.
+2. Go to **SQL Editor**.
+3. Paste the full contents of
+   `client/supabase/migrations/20240103_chat_schema_policies.sql`.
+4. Run it once, then retry creating a conversation.
+
+The migration is idempotent and can be re-run safely. It also forces the
+`SECURITY DEFINER` helpers to be owned by the table owner, which is required for
+them to bypass RLS during conversation creation.
+
+Verify it with:
+
+```sql
+SELECT proname, pg_get_userbyid(proowner) AS owner
+FROM pg_proc
+WHERE proname IN (
+  'resolve_email_by_username',
+  'get_or_create_direct_conversation',
+  'is_conversation_participant'
+);
+```
+
+The owner should match the owner of `public.conversations`/`public.users`.
+
 ## Auth / Signup / Signin
 
 1. **Error:** `public.users` has RLS enabled with no policies, so username lookup and most user reads are denied.
