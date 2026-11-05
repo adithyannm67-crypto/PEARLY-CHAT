@@ -4,6 +4,7 @@ import isUuid from "#utils/isUuid.js";
 import withAuth from "#utils/withAuth.js";
 import {
   acceptConnectionRequest,
+  cancelConnectionRequest,
   createConnectionRequest,
   listConnectionRequests,
   rejectConnectionRequest,
@@ -29,7 +30,7 @@ export default async function handler(req) {
       user.id,
       accessToken,
       direction,
-      status
+      status.toUpperCase()
     );
 
     return { requests };
@@ -73,6 +74,10 @@ export default async function handler(req) {
 
     if (action === "reject") {
       return rejectConnectionRequest(user.id, requestId, accessToken);
+    }
+
+    if (action === "cancel") {
+      return cancelConnectionRequest(user.id, requestId, accessToken);
     }
 
     throw new HttpError(400, "action must be accept or reject");

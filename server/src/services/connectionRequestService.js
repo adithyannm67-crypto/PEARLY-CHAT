@@ -228,6 +228,39 @@ export async function acceptConnectionRequest(userId, requestId, accessToken) {
   };
 }
 
+export async function cancelConnectionRequest(userId, requestId, accessToken) {
+  const { data: updated, error } = await supabaseAuth(accessToken)
+    .from("connection_requests")
+    .update({ status: CONNECTION_REQUEST_STATUS.CANCELLED })
+    .eq("id", requestId)
+    .eq("sender_id", userId)
+    .eq("status", CONNECTION_REQUEST_STATUS.PENDING)
+    .select(REQUEST_COLUMNS)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (!updated) {
+    throw new HttpError(404, "Pending connection request not found");
+  }
+
+  return { request: await requestWithProfile(updated, updated.receiver_id, accessToken) };
+}
+
+export async function listConnectionRequestHistory(userId, accessToken) {
+  const [incoming, outgoing] = await Promise.all([
+    listConnectionRequests(userId, accessToken, "incoming", "all"),
+    listConnectionRequests(userId, accessToken, "outgoing", "all"),
+  ]);
+
+  return [
+    ...incoming.map((request) => ({ ...request, direction: "incoming" })),
+    ...outgoing.map((request) => ({ ...request, direction: "outgoing" })),
+  ].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
 export async function rejectConnectionRequest(userId, requestId, accessToken) {
   const { data: updated, error } = await supabaseAuth(accessToken)
     .from("connection_requests")
