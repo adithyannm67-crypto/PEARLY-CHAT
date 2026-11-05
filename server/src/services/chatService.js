@@ -199,6 +199,29 @@ export async function updateUser(userId, updates, accessToken) {
   return mapUser(data);
 }
 
+export async function deleteConversation(userId, conversationId, accessToken) {
+  const db = supabaseAuth(accessToken);
+
+  const participant = await isConversationParticipant(
+    conversationId,
+    userId,
+    accessToken
+  );
+
+  if (!participant) {
+    throw new Error("Conversation not found");
+  }
+
+  const { error } = await db
+    .from("conversations")
+    .delete()
+    .eq("id", conversationId);
+
+  if (error) throw error;
+
+  return { success: true };
+}
+
 export async function isConversationParticipant(conversationId, userId, accessToken) {
   const { data, error } = await supabaseAuth(accessToken)
     .from("conversation_participants")

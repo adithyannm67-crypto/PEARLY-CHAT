@@ -15,15 +15,21 @@ export default async function handler(req) {
   if (req.method === "GET") {
     const { searchParams } = new URL(req.url, "http://localhost");
     const direction = searchParams.get("direction") || "incoming";
+    const status = searchParams.get("status") || "pending";
 
     if (direction !== "incoming" && direction !== "outgoing") {
       throw new HttpError(400, "direction must be incoming or outgoing");
     }
 
+    if (!["pending", "accepted", "rejected", "all"].includes(status)) {
+      throw new HttpError(400, "status must be pending, accepted, rejected, or all");
+    }
+
     const requests = await listConnectionRequests(
       user.id,
       accessToken,
-      direction
+      direction,
+      status
     );
 
     return { requests };

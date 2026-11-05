@@ -26,6 +26,10 @@ export default function Dashboard() {
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [connectionRequests, setConnectionRequests] = useState<ConnectionRequest[]>([]);
+  const [sentConnectionRequests, setSentConnectionRequests] = useState<ConnectionRequest[]>([]);
+  const [requestHistory, setRequestHistory] = useState<ConnectionRequest[]>([]);
+  const [sentConnectionRequestsError, setSentConnectionRequestsError] = useState('');
+  const [sentConnectionRequestsLoading, setSentConnectionRequestsLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<ChatUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -96,12 +100,72 @@ export default function Dashboard() {
     }
   }, [userId]);
 
+  const loadRequestHistory = useCallback(async () => {
+    if (!userId) return;
+
+    try {
+      const [incomingResponse, outgoingResponse] = await Promise.all([
+        authFetch('/api/connection-requests?direction=incoming&status=all', {
+          cache: 'no-store',
+        }),
+        authFetch('/api/connection-requests?direction=outgoing&status=all', {
+          cache: 'no-store',
+        }),
+      ]);
+      const incomingData = await incomingResponse.json();
+      const outgoingData = await outgoingResponse.json();
+
+      const incoming = incomingData.data?.requests ?? [];
+      const outgoing = outgoingData.data?.requests ?? [];
+
+      setRequestHistory(
+        [...incoming, ...outgoing].sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
+      );
+    } catch {
+      // Keep history best-effort.
+    }
+  }, [userId]);
+
+  const loadSentConnectionRequests = useCallback(async () => {
+    if (!userId) return;
+
+    setSentConnectionRequestsError('');
+    setSentConnectionRequestsLoading(true);
+
+    try {
+      const response = await authFetch(
+        '/api/connection-requests?direction=outgoing',
+        { cache: 'no-store' }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load sent connection requests');
+      }
+
+      setSentConnectionRequests(data.data?.requests ?? []);
+    } catch (err) {
+      setSentConnectionRequestsError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to load sent connection requests'
+      );
+    } finally {
+      setSentConnectionRequestsLoading(false);
+    }
+  }, [userId]);
+
   useEffect(() => {
     void Promise.resolve().then(() => {
       void loadConversations();
       void loadConnectionRequests();
+      void loadSentConnectionRequests();
+      void loadRequestHistory();
     });
-  }, [loadConnectionRequests, loadConversations]);
+  }, [loadConnectionRequests, loadConversations, loadSentConnectionRequests, loadRequestHistory]);
 
   useEffect(() => {
     if (!userId) return;
@@ -143,10 +207,21 @@ export default function Dashboard() {
       .on(
         'postgres_changes',
         {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
           event: 'INSERT',
           schema: 'public',
-          table: 'connection_requests',
-          filter: `receiver_id=eq.${userId}`,
+          table: 'messages',
         },
         () => {
           loadConnectionRequests();
@@ -162,6 +237,30 @@ export default function Dashboard() {
         },
         () => {
           loadConnectionRequests();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'connection_requests',
+        },
+        () => {
+          loadConnectionRequests();
+          loadSentConnectionRequests();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'connection_requests',
+          filter: `receiver_id=eq.${userId}`,
+        },
+        () => {
+          loadSentConnectionRequests();
         }
       )
       .on(
@@ -175,6 +274,8 @@ export default function Dashboard() {
         (payload) => {
           const row = payload.new as { status?: string };
 
+          loadSentConnectionRequests();
+
           if (row.status === 'accepted') {
             loadConversations();
           }
@@ -185,7 +286,7 @@ export default function Dashboard() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadConnectionRequests, loadConversations, supabase, userId]);
+  }, [loadConnectionRequests, loadConversations, loadSentConnectionRequests, supabase, userId]);
 
   const handleSelectConversation = (id: string) => {
     setSelectedConversationId(id);
@@ -228,6 +329,26 @@ export default function Dashboard() {
 
     if (data.data?.conversation) {
       handleConversationCreated(data.data.conversation);
+    }
+  };
+
+  const handleDeleteConversation = async (conversationId: string) => {
+    const response = await authFetch(
+      `/api/conversations?conversationId=${encodeURIComponent(conversationId)}`,
+      { method: 'DELETE' }
+    );
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to delete conversation');
+    }
+
+    setConversations((prev) =>
+      prev.filter((conversation) => conversation.id !== conversationId)
+    );
+    if (selectedConversationId === conversationId) {
+      setSelectedConversationId(null);
+      setShowChat(false);
     }
   };
 
@@ -293,12 +414,23 @@ export default function Dashboard() {
             connectionRequests={userId ? connectionRequests : []}
             connectionRequestsError={userId ? connectionRequestsError : ''}
             connectionRequestsLoading={userId ? connectionRequestsLoading : false}
+            sentConnectionRequests={userId ? sentConnectionRequests : []}
+            sentConnectionRequestsError={userId ? sentConnectionRequestsError : ''}
+            sentConnectionRequestsLoading={userId ? sentConnectionRequestsLoading : false}
+            requestHistory={userId ? requestHistory : []}
             loading={displayLoading}
             error={displayError}
             selectedConversationId={selectedConversationId}
             onSelectConversation={handleSelectConversation}
             onAcceptRequest={handleAcceptRequest}
             onRejectRequest={handleRejectRequest}
+            onDeleteConversation={handleDeleteConversation}
+            onConnectionRequestSent={(request) => {
+              setSentConnectionRequests((prev) => [
+                request,
+                ...prev.filter((item) => item.id !== request.id),
+              ]);
+            }}
             onUserUpdated={handleUserUpdated}
             onLogout={handleLogout}
           />

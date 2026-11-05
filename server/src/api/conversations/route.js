@@ -3,6 +3,7 @@ import HttpError from "#utils/HttpError.js";
 import isUuid from "#utils/isUuid.js";
 import withAuth from "#utils/withAuth.js";
 import {
+  deleteConversation,
   getConversations,
   getOrCreateDirectConversation,
   getUser,
@@ -41,5 +42,20 @@ export default async function handler(req) {
     return { conversation };
   }
 
-  throw new HttpError(405, "Method not allowed. Only GET and POST are accepted.");
+  if (req.method === "DELETE") {
+    const { searchParams } = new URL(req.url, "http://localhost");
+    const conversationId = searchParams.get("conversationId");
+
+    if (!isUuid(conversationId)) {
+      throw new HttpError(400, "A valid conversationId is required");
+    }
+
+    await deleteConversation(user.id, conversationId, accessToken);
+    return { success: true };
+  }
+
+  throw new HttpError(
+    405,
+    "Method not allowed. Only GET, POST and DELETE are accepted."
+  );
 }

@@ -9,14 +9,18 @@ interface ConnectionRequestsProps {
   requests: ConnectionRequest[];
   error?: string;
   loading?: boolean;
-  onAccept: (requestId: string) => Promise<void>;
-  onReject: (requestId: string) => Promise<void>;
+  mode?: 'incoming' | 'outgoing' | 'history';
+  title?: string;
+  onAccept?: (requestId: string) => Promise<void>;
+  onReject?: (requestId: string) => Promise<void>;
 }
 
 export default function ConnectionRequests({
   requests,
   error,
   loading,
+  mode = 'incoming',
+  title = 'Connection requests',
   onAccept,
   onReject,
 }: ConnectionRequestsProps) {
@@ -34,9 +38,9 @@ export default function ConnectionRequests({
 
     try {
       if (action === 'accept') {
-        await onAccept(requestId);
+        await onAccept?.(requestId);
       } else {
-        await onReject(requestId);
+        await onReject?.(requestId);
       }
     } catch (err) {
       setActionError(
@@ -51,7 +55,7 @@ export default function ConnectionRequests({
     <div className="px-3 pb-3 border-b border-border-custom/40 shrink-0">
       <div className="flex items-center justify-between px-1 py-2">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
-          Connection requests
+          {title}
         </span>
         {requests.length > 0 && (
           <span className="min-w-[20px] h-5 rounded-full bg-primary text-white text-[10px] flex items-center justify-center font-medium px-1.5">
@@ -73,7 +77,7 @@ export default function ConnectionRequests({
       <div className="space-y-2 max-h-52 overflow-y-auto">
         {!loading && !error && requests.length === 0 && (
           <p className="px-1 pb-1 text-xs text-text-secondary">
-            No pending requests
+            {mode === 'incoming' ? 'No pending requests' : 'No sent requests'}
           </p>
         )}
         {requests.map((request) => (
@@ -95,26 +99,32 @@ export default function ConnectionRequests({
               </div>
             </div>
 
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                disabled={busyId !== null}
-                onClick={() => handleAction(request.id, 'accept')}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <Check size={14} />
-                {busyId === request.id ? 'Working...' : 'Accept'}
-              </button>
-              <button
-                type="button"
-                disabled={busyId !== null}
-                onClick={() => handleAction(request.id, 'reject')}
-                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-border-custom px-2 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                <X size={14} />
-                Decline
-              </button>
-            </div>
+            {mode === 'incoming' && request.status === 'pending' ? (
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  disabled={busyId !== null}
+                  onClick={() => handleAction(request.id, 'accept')}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-white hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <Check size={14} />
+                  {busyId === request.id ? 'Working...' : 'Accept'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId !== null}
+                  onClick={() => handleAction(request.id, 'reject')}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-border-custom px-2 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  <X size={14} />
+                  Decline
+                </button>
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-text-secondary capitalize">
+                {request.status}
+              </p>
+            )}
           </div>
         ))}
       </div>

@@ -5,16 +5,18 @@ import { Search } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 import ChatModal from '@/components/ChatModal';
 import { authFetch } from '@/lib/authFetch';
-import type { ChatUser } from '@/types/chat';
+import type { ChatUser, ConnectionRequest } from '@/types/chat';
 
 interface NewChatModalProps {
   currentUserId: string;
   onClose: () => void;
+  onConnectionRequestSent?: (request: ConnectionRequest) => void;
 }
 
 export default function NewChatModal({
   currentUserId,
   onClose,
+  onConnectionRequestSent,
 }: NewChatModalProps) {
   const [users, setUsers] = useState<ChatUser[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,6 +98,10 @@ export default function NewChatModal({
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to send connection request');
+      }
+
+      if (data.data?.request) {
+        onConnectionRequestSent?.(data.data.request);
       }
 
       setSentTo(user.id);

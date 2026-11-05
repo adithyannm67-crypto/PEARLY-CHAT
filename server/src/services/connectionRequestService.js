@@ -5,6 +5,8 @@ import { getOrCreateDirectConversation } from "./chatService.js";
 const PUBLIC_COLUMNS = "id, username, avatar_url, full_name, created_at";
 const REQUEST_COLUMNS = "id, sender_id, receiver_id, status, created_at";
 
+import { CONNECTION_REQUEST_STATUS } from "#config/database-enums.js";
+
 function getInitials(name, username) {
   const source = (name || username || "?").trim();
   const parts = source.split(/\s+/).filter(Boolean);
@@ -95,18 +97,23 @@ async function findExistingConversation(userId, otherUserId, accessToken) {
   return Boolean(shared && shared.length > 0);
 }
 
-export async function listConnectionRequests(userId, accessToken, direction = "incoming") {
+export async function listConnectionRequests(userId, accessToken, direction = "incoming", status = "pending") {
   const db = supabaseAuth(accessToken);
   const isOutgoing = direction === "outgoing";
   const userColumn = isOutgoing ? "sender_id" : "receiver_id";
   const otherUserColumn = isOutgoing ? "receiver_id" : "sender_id";
 
-  const { data, error } = await db
+  let query = db
     .from("connection_requests")
     .select(REQUEST_COLUMNS)
     .eq(userColumn, userId)
-    .eq("status", "pending")
     .order("created_at", { ascending: true });
+
+  if (status && status !== "all") {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -133,7 +140,7 @@ export async function createConnectionRequest(userId, receiverId, accessToken) {
   const { data: existing, error: existingError } = await db
     .from("connection_requests")
     .select(REQUEST_COLUMNS)
-    .eq("status", "pending")
+    .eq("status", CONNECTION_REQUEST_STATUS.PENDING)
     .or(
       `and(sender_id.eq.${userId},receiver_id.eq.${receiverId}),` +
         `and(sender_id.eq.${receiverId},receiver_id.eq.${userId})`
@@ -159,7 +166,7 @@ export async function createConnectionRequest(userId, receiverId, accessToken) {
     .insert({
       sender_id: userId,
       receiver_id: receiverId,
-      status: "pending",
+      
     })
     .select(REQUEST_COLUMNS)
     .single();
@@ -190,7 +197,7 @@ export async function acceptConnectionRequest(userId, requestId, accessToken) {
     throw new HttpError(404, "Connection request not found");
   }
 
-  if (request.status !== "pending") {
+  if (request.status !== CONNECTION_REQUEST_STATUS.PENDING) {
     throw new HttpError(409, "Connection request is no longer pending");
   }
 
@@ -202,10 +209,10 @@ export async function acceptConnectionRequest(userId, requestId, accessToken) {
 
   const { data: updated, error: updateError } = await db
     .from("connection_requests")
-    .update({ status: "accepted" })
+    .update({ status: CONNECTION_REQUEST_STATUS.ACCEPTED })
     .eq("id", requestId)
     .eq("receiver_id", userId)
-    .eq("status", "pending")
+    .eq("status", CONNECTION_REQUEST_STATUS.PENDING)
     .select(REQUEST_COLUMNS)
     .maybeSingle();
 
@@ -224,10 +231,10 @@ export async function acceptConnectionRequest(userId, requestId, accessToken) {
 export async function rejectConnectionRequest(userId, requestId, accessToken) {
   const { data: updated, error } = await supabaseAuth(accessToken)
     .from("connection_requests")
-    .update({ status: "rejected" })
+    .update({ status: CONNECTION_REQUEST_STATUS.REJECTED })
     .eq("id", requestId)
     .eq("receiver_id", userId)
-    .eq("status", "pending")
+    .eq("status", CONNECTION_REQUEST_STATUS.PENDING)
     .select(REQUEST_COLUMNS)
     .maybeSingle();
 
