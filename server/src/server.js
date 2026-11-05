@@ -7,37 +7,22 @@ import conversationsHandler from "./api/conversations/route.js";
 import messagesHandler from "./api/messages/route.js";
 import usersHandler from "./api/users/route.js";
 import * as responseHandler from "#utils/responseHandler.js";
+import handlePreflight from "#utils/handlePreflight.js";
 dotenv.config();
-
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "http://localhost:3000",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie",
-  "Access-Control-Allow-Credentials": "true",
-};
 
 // Secure cookie settings
 const COOKIE_SECURE = process.env.NODE_ENV === "production";
 const COOKIE_SAME_SITE = "lax";
 
 const server = http.createServer(async (req, res) => {
-  // Set CORS headers
-  Object.entries(CORS_HEADERS).forEach(([key, value]) => {
-    res.setHeader(key, value);
-  });
-
-  res.setHeader("Content-Type", "application/json");
-
-  // Handle preflight request
-  if (req.method === "OPTIONS") {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+  if (handlePreflight(req, res)) return;
 
   console.log(req.method, req.url);
 
-  const { pathname } = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+  const { pathname } = new URL(
+    req.url,
+    `http://${req.headers.host || "localhost"}`,
+  );
   let output = null;
   try {
     // Auth routes
@@ -68,7 +53,9 @@ const server = http.createServer(async (req, res) => {
     responseHandler.successResponse(res, output);
   } catch (error) {
     console.log(error);
-    responseHandler.errorResponse(res, error.message);
+    if (!res.headersSent) {
+      responseHandler.errorResponse(res, error.message);
+    }
   }
 });
 
