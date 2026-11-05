@@ -199,17 +199,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const handleUserUpdated = (user: ChatUser) => {
+  const handleUserUpdated = useCallback((user: ChatUser) => {
     void user;
-  };
+  }, []);
 
-  const onConnectionRequestSent = (request: ConnectionRequest) => {
+  const onConnectionRequestSent = useCallback((request: ConnectionRequest) => {
     setSentConnectionRequests((prev) => [
       request,
       ...prev.filter((item) => item.id !== request.id),
     ]);
     void loadRequestHistory();
-  };
+  }, [loadRequestHistory]);
 
   const sessionUser = session?.user;
   const sessionName =

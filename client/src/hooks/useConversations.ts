@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '@/lib/authFetch';
 import type { ChatUser, Conversation } from '@/types/chat';
 
@@ -8,7 +8,7 @@ export function useConversations(userId: string | null) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     if (!userId) return;
 
     setLoading(true);
@@ -33,30 +33,36 @@ export function useConversations(userId: string | null) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
-  const deleteConversation = async (conversationId: string) => {
-    const response = await authFetch(
-      `/api/conversations?conversationId=${encodeURIComponent(conversationId)}`,
-      { method: 'DELETE' }
-    );
-    const data = await response.json();
+  const deleteConversation = useCallback(
+    async (conversationId: string) => {
+      const response = await authFetch(
+        `/api/conversations?conversationId=${encodeURIComponent(conversationId)}`,
+        { method: 'DELETE' }
+      );
+      const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to delete conversation');
-    }
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to delete conversation');
+      }
 
-    setConversations((prev) =>
-      prev.filter((conversation) => conversation.id !== conversationId)
-    );
-  };
+      setConversations((prev) =>
+        prev.filter((conversation) => conversation.id !== conversationId)
+      );
+    },
+    []
+  );
 
-  const handleConversationCreated = (conversation: Conversation) => {
-    setConversations((prev) => [
-      conversation,
-      ...prev.filter((item) => item.id !== conversation.id),
-    ]);
-  };
+  const handleConversationCreated = useCallback(
+    (conversation: Conversation) => {
+      setConversations((prev) => [
+        conversation,
+        ...prev.filter((item) => item.id !== conversation.id),
+      ]);
+    },
+    []
+  );
 
   useEffect(() => {
     if (!userId) {

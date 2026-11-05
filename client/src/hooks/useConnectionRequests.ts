@@ -36,7 +36,7 @@ export function useConnectionRequests(userId: string | null) {
     }
   }, [userId]);
 
-  const acceptRequest = async (requestId: string) => {
+  const acceptRequest = useCallback(async (requestId: string) => {
     const response = await authFetch('/api/connection-requests', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -53,9 +53,9 @@ export function useConnectionRequests(userId: string | null) {
     );
 
     return data.data?.conversation ?? null;
-  };
+  }, []);
 
-  const rejectRequest = async (requestId: string) => {
+  const rejectRequest = useCallback(async (requestId: string) => {
     const response = await authFetch('/api/connection-requests', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -70,7 +70,7 @@ export function useConnectionRequests(userId: string | null) {
     setRequests((prev) =>
       prev.filter((request) => request.id !== requestId)
     );
-  };
+  }, []);
 
   useEffect(() => {
     if (!userId) {
