@@ -187,7 +187,11 @@ export default function Sidebar({
         <div className="absolute top-16 left-0 right-0 z-20 mx-3 rounded-lg border border-border-custom bg-bg-secondary shadow-lg">
           <div className="max-h-64 overflow-y-auto">
             <ConnectionRequests
-              requests={requestHistory}
+              requests={
+                requestHistory.length > 0
+                  ? requestHistory
+                  : [...connectionRequests, ...sentConnectionRequests]
+              }
               mode="history"
               title="Requests"
             />

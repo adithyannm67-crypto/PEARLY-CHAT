@@ -99,7 +99,7 @@ export default function ConnectionRequests({
               </div>
             </div>
 
-            {mode === 'incoming' && request.status === 'pending' ? (
+           <> {true ? (
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
@@ -124,7 +124,7 @@ export default function ConnectionRequests({
               <p className="mt-2 text-xs text-text-secondary capitalize">
                 {request.status}
               </p>
-            )}
+            )}</>
           </div>
         ))}
       </div>
