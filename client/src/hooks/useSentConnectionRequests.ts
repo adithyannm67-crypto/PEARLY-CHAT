@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '@/lib/authFetch';
 import type { ConnectionRequest } from '@/types/chat';
 
@@ -7,7 +7,7 @@ export function useSentConnectionRequests(userId: string | null) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const loadSentConnectionRequests = async () => {
+  const loadSentConnectionRequests = useCallback(async () => {
     if (!userId) return;
 
     setError('');
@@ -34,6 +34,23 @@ export function useSentConnectionRequests(userId: string | null) {
     } finally {
       setLoading(false);
     }
+  }, [userId]);
+
+  const cancelRequest = async (requestId: string) => {
+    const response = await authFetch('/api/connection-requests', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requestId, action: 'cancel' }),
+    });
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to cancel connection request');
+    }
+
+    setRequests((prev) =>
+      prev.filter((request) => request.id !== requestId)
+    );
   };
 
   useEffect(() => {
@@ -55,5 +72,6 @@ export function useSentConnectionRequests(userId: string | null) {
     error,
     loading,
     loadSentConnectionRequests,
+    cancelRequest,
   };
 }

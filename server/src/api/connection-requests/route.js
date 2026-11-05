@@ -18,9 +18,12 @@ export default async function handler(req) {
     const direction = searchParams.get("direction") || "incoming";
     const status = searchParams.get("status") || "PENDING";
 
-    if (direction !== "incoming" && direction !== "outgoing") {
-      throw new HttpError(400, "direction must be incoming or outgoing");
-    }
+
+    
+
+    // if (direction !== "incoming" && direction !== "outgoing") {
+    //   throw new HttpError(400, "direction must be incoming or outgoing");
+    // }
 
     if (!["PENDING", "ACCEPTED", "REJECTED", "ALL"].includes(status)) {
       throw new HttpError(400, "status must be pending, accepted, rejected, or all");
@@ -32,6 +35,8 @@ export default async function handler(req) {
       direction,
       status.toUpperCase()
     );
+
+    console.log("Connection requests:", requests);
 
     return { requests };
   }

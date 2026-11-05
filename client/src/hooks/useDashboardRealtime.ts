@@ -82,6 +82,7 @@ export function useDashboardRealtime({
           event: '*',
           schema: 'public',
           table: 'connection_requests',
+          filter: `receiver_id=eq.${userId}`,
         },
         () => {
           void loadConnectionRequests();

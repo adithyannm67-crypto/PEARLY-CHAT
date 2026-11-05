@@ -97,7 +97,26 @@ async function findExistingConversation(userId, otherUserId, accessToken) {
   return Boolean(shared && shared.length > 0);
 }
 
-export async function listConnectionRequests(userId, accessToken, direction = "incoming", status = "pending") {
+
+
+export async function listConnectionRequests1(userId, accessToken){
+
+    const db = supabaseAuth(accessToken);
+
+    const { data, error } = await db
+      .from("connection_requests")
+      .select(REQUEST_COLUMNS)
+      .eq("sender_id", userId)
+      .order("created_at", { ascending: true });
+
+    if (error) throw error;
+
+    console.log("Connection requests:", data);
+    return data.map((row) => mapRequest(row, null));
+
+}
+
+export async function listConnectionRequests(userId, accessToken, direction = "incoming", status = "PENDING") {
   const db = supabaseAuth(accessToken);
   const isOutgoing = direction === "outgoing";
   const userColumn = isOutgoing ? "sender_id" : "receiver_id";
@@ -110,7 +129,7 @@ export async function listConnectionRequests(userId, accessToken, direction = "i
     .order("created_at", { ascending: true });
 
   if (status && status !== "ALL") {
-    query = query.eq("status", status);
+    // query = query.eq("status", status);
   }
 
   const { data, error } = await query;

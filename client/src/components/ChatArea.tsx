@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 import { useSupabase } from '@/components/AuthProvider';
+import { useDashboard } from '@/context/DashboardContext';
 import { authFetch } from '@/lib/authFetch';
 import type { Conversation, Message } from '@/types/chat';
 
@@ -23,12 +24,6 @@ type RealtimeMessageRow = {
   content: string;
   created_at: string;
 };
-
-interface ChatAreaProps {
-  currentUserId: string | null;
-  conversation: Conversation | null;
-  onBack?: () => void;
-}
 
 function getDateKey(ts: string): string {
   const d = new Date(ts);
@@ -69,7 +64,8 @@ function formatMessageTime(ts: string): string {
   });
 }
 
-export default function ChatArea({ currentUserId, conversation, onBack }: ChatAreaProps) {
+export default function ChatArea() {
+  const { userId, selectedConversation, handleBack } = useDashboard();
   const { supabase } = useSupabase();
   const [messageInput, setMessageInput] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
@@ -78,11 +74,11 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const conversationId = conversation?.id ?? null;
+  const selectedConversationId = selectedConversation?.id ?? null;
 
-  // When conversationId changes, fetch messages from the Next.js API
+  // When selectedConversationId changes, fetch messages from the Next.js API
   useEffect(() => {
-    if (!conversationId) return;
+    if (!selectedConversationId) return;
 
     let cancelled = false;
 
@@ -91,7 +87,7 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
 
       try {
         const response = await authFetch(
-          `/api/messages?conversationId=${encodeURIComponent(conversationId!)}`,
+          `/api/messages?selectedConversationId=${encodeURIComponent(selectedConversationId!)}`,
           { cache: 'no-store' }
         );
         const data = await response.json();
@@ -119,20 +115,20 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
     return () => {
       cancelled = true;
     };
-  }, [conversationId]);
+  }, [selectedConversationId]);
 
   useEffect(() => {
-    if (!conversationId) return;
+    if (!selectedConversationId) return;
 
     const channel = supabase
-      .channel(`conversation-messages:${conversationId}`)
+      .channel(`selectedConversation-messages:${selectedConversationId}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
+          filter: `conversation_id=eq.${selectedConversationId}`,
         },
         (payload) => {
           const row = payload.new as RealtimeMessageRow;
@@ -157,18 +153,18 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [conversationId, supabase]);
+  }, [selectedConversationId, supabase]);
 
   // Scroll to bottom when localMessages changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [localMessages]);
 
-  const otherUser = conversation?.otherUser ?? null;
+  const otherUser = selectedConversation?.otherUser ?? null;
 
   const handleSend = async () => {
     const trimmed = messageInput.trim();
-    if (!trimmed || !conversationId || !currentUserId || sending) return;
+    if (!trimmed || !selectedConversationId || !userId || sending) return;
 
     setSending(true);
     setError('');
@@ -178,7 +174,7 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          conversationId,
+          selectedConversationId,
           content: trimmed,
         }),
       });
@@ -202,8 +198,8 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
     }
   };
 
-  // Empty State (when no conversation is selected)
-  if (!conversationId || !conversation || !otherUser) {
+  // Empty State (when no selectedConversation is selected)
+  if (!selectedConversationId || !selectedConversation || !otherUser) {
     return (
       <div className="flex-1 flex items-center justify-center bg-bg-main h-full">
         <div className="flex flex-col items-center text-center p-6 select-none">
@@ -215,14 +211,14 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
             Welcome to Peerly
           </h2>
           <p className="text-sm text-text-secondary mt-1">
-            Select a conversation to start chatting
+            Select a selectedConversation to start chatting
           </p>
         </div>
       </div>
     );
   }
 
-  // Chat View (when conversationId is set)
+  // Chat View (when selectedConversationId is set)
   return (
     <div className="flex flex-col h-full bg-bg-main">
       {/* 1. Chat Header */}
@@ -230,8 +226,8 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
         {/* Back button (mobile) */}
         <button
           type="button"
-          onClick={onBack}
-          aria-label="Back to conversations"
+          onClick={handleBack}
+          aria-label="Back to selectedConversations"
           className="md:hidden p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
         >
           <ArrowLeft size={20} />
@@ -312,7 +308,7 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
             index > 0 ? getDateKey(localMessages[index - 1].timestamp) : null;
           const showDateSeparator = dateKey !== prevDateKey;
 
-          const isSent = msg.senderId === currentUserId;
+          const isSent = msg.senderId === userId;
           const prevMsg = index > 0 ? localMessages[index - 1] : null;
           const isFirstInGroup =
             showDateSeparator || !prevMsg || prevMsg.senderId !== msg.senderId;
@@ -420,10 +416,10 @@ export default function ChatArea({ currentUserId, conversation, onBack }: ChatAr
           {/* Send button */}
           <button
             type="submit"
-            disabled={!messageInput.trim() || sending || !currentUserId}
+            disabled={!messageInput.trim() || sending || !userId}
             aria-label="Send message"
             className={`p-2.5 rounded-full transition-all ${
-              messageInput.trim() && !sending && currentUserId
+              messageInput.trim() && !sending && userId
                 ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
                 : 'bg-surface text-text-secondary cursor-not-allowed'
             }`}

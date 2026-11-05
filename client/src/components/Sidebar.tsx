@@ -1,65 +1,49 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { SquarePen, Settings, Search, LogOut, Bell, Trash2 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
 import ConnectionRequests from '@/components/ConnectionRequests';
 import RequestHistory from '@/components/RequestHistory/RequestHistory';
 import NewChatModal from '@/components/NewChatModal';
 import SettingsModal from '@/components/SettingsModal';
-import type { ChatUser, ConnectionRequest, Conversation } from '@/types/chat';
-
+import type { ChatUser, Conversation } from '@/types/chat';
+import { useDashboard } from '@/context/DashboardContext';
 import { formatTime } from '@/lib/utils/formatDate-time';
 
-interface SidebarProps {
-  currentUser: ChatUser | null;
-  conversations: Conversation[];
-  connectionRequests: ConnectionRequest[];
-  connectionRequestsError: string;
-  connectionRequestsLoading?: boolean;
-  sentConnectionRequests?: ConnectionRequest[];
-  sentConnectionRequestsError?: string;
-  sentConnectionRequestsLoading?: boolean;
-  requestHistory?: ConnectionRequest[];
-  loading: boolean;
-  error: string;
-  selectedConversationId: string | null;
-  onSelectConversation: (id: string) => void;
-  onAcceptRequest: (requestId: string) => Promise<void>;
-  onRejectRequest: (requestId: string) => Promise<void>;
-  onDeleteConversation?: (conversationId: string) => Promise<void>;
-  onConnectionRequestSent?: (request: ConnectionRequest) => void;
-  onUserUpdated: (user: ChatUser) => void;
-  onLogout: () => void;
-}
+export default function Sidebar() {
+  const {
+    currentUser,
+    conversations,
+    connectionRequests,
+    connectionRequestsError,
+    connectionRequestsLoading,
+    sentConnectionRequests,
+    sentConnectionRequestsError,
+    sentConnectionRequestsLoading,
+    requestHistory,
+    loading,
+    error,
+    selectedConversationId,
+    handleSelectConversation,
+    handleAcceptRequest,
+    handleRejectRequest,
+    handleDeleteConversation,
+    handleUserUpdated,
+    handleLogout,
+    onConnectionRequestSent,
+    userId,
+    requestsOpen,
+    setRequestsOpen,
+    requestTab,
+    setRequestTab,
+    historyTab,
+    setHistoryTab,
+    activeModal,
+    setActiveModal,
+  } = useDashboard();
 
-export default function Sidebar({
-  currentUser,
-  conversations,
-  connectionRequests,
-  connectionRequestsError,
-  connectionRequestsLoading,
-  sentConnectionRequests = [],
-  sentConnectionRequestsError = '',
-  sentConnectionRequestsLoading = false,
-  requestHistory = [],
-  loading,
-  error,
-  selectedConversationId,
-  onSelectConversation,
-  onAcceptRequest,
-  onRejectRequest,
-  onDeleteConversation,
-  onConnectionRequestSent,
-  onUserUpdated,
-  onLogout,
-}: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeModal, setActiveModal] = useState<'new-chat' | 'settings' | null>(
-    null
-  );
-  const [requestsOpen, setRequestsOpen] = useState(true);
-  const [requestTab, setRequestTab] = useState<'incoming' | 'sent' | 'history'>('incoming');
 
   const filteredConversations = conversations.filter((conversation) => {
     const otherUser = conversation.otherUser;
@@ -70,7 +54,6 @@ export default function Sidebar({
     );
   });
 
-
   const noConversationsFound = !loading && !error && filteredConversations.length === 0;
 
   const requestsToShow = requestHistory.length > 0
@@ -79,9 +62,7 @@ export default function Sidebar({
 
   return (
     <aside className="relative flex flex-col h-full bg-bg-secondary select-none">
-      {/* 1. Header (fixed at top of sidebar) */}
       <header className="h-16 bg-bg-secondary border-b border-border-custom px-4 flex items-center justify-between shrink-0">
-        {/* Left side */}
         <div className="flex items-center gap-3">
           <Avatar
             initials={currentUser?.avatar ?? '?'}
@@ -91,7 +72,6 @@ export default function Sidebar({
           <span className="font-semibold text-lg text-text-primary">Chats</span>
         </div>
 
-        {/* Right side */}
         <div className="flex items-center gap-1 relative">
           <button
             type="button"
@@ -131,7 +111,7 @@ export default function Sidebar({
             type="button"
             aria-label="Log out"
             title="Log out"
-            onClick={onLogout}
+            onClick={handleLogout}
             className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
           >
             <LogOut size={18} />
@@ -139,26 +119,22 @@ export default function Sidebar({
         </div>
       </header>
 
-      {/* 2. Search bar */}
       <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-
-      {/* 3. Connection requests */}
 
       {requestsOpen && (
         <div className="absolute top-16 left-0 right-0 z-20 mx-3 rounded-lg border border-border-custom bg-bg-secondary shadow-lg max-h-96 overflow-y-auto">
-          <RequestHistory userId={currentUser?.id ?? null} />
+          <RequestHistory userId={userId} />
         </div>
       )}
 
-      {/* 4. Conversation list */}
       <ConversationList
         error={error}
         loading={loading}
         filteredConversations={filteredConversations}
         noConversationsFound={noConversationsFound}
         selectedConversationId={selectedConversationId}
-        onSelectConversation={onSelectConversation}
-        onDeleteConversation={onDeleteConversation}
+        onSelectConversation={handleSelectConversation}
+        onDeleteConversation={handleDeleteConversation}
       />
 
       {activeModal === 'new-chat' && currentUser && (
@@ -173,46 +149,12 @@ export default function Sidebar({
         <SettingsModal
           currentUser={currentUser}
           onClose={() => setActiveModal(null)}
-          onUserUpdated={onUserUpdated}
+          onUserUpdated={handleUserUpdated}
         />
       )}
     </aside>
   );
 }
-
-const RequestTabs = ({ requestsToShow }: { requestsToShow: ConnectionRequest[] }) => {
-  return (<div className="absolute top-16 left-0 right-0 z-20 mx-3 rounded-lg border border-border-custom bg-bg-secondary shadow-lg">
-    <div className="max-h-64 overflow-y-auto">
-      <ConnectionRequests
-        requests={requestsToShow}
-        mode="history"
-        title="Requests"
-      />
-    </div>
-  </div>)
-}
-
-const SearchBar = ({ searchQuery, setSearchQuery }: { searchQuery: string; setSearchQuery: (query: string) => void }) => {
-  return (
-    <div className="px-3 py-3 shrink-0">
-      <div className="relative">
-        <Search
-          size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"
-        />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search conversations..."
-          className="w-full bg-surface border-none rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-      </div>
-    </div>
-  )
-
-}
-
 
 const ConversationList = ({
   error,
@@ -231,47 +173,45 @@ const ConversationList = ({
   onSelectConversation: (id: string) => void;
   onDeleteConversation?: (conversationId: string) => Promise<void>;
 }) => {
-  return (<div className="flex-1 overflow-y-auto">
-    {loading && <LoadingConversations />}
+  return (
+    <div className="flex-1 overflow-y-auto">
+      {loading && <LoadingConversations />}
 
-    {!loading && error && <ErrorConversations error={error} />}
+      {!loading && error && <ErrorConversations error={error} />}
 
-    {noConversationsFound && (
-      <div className="p-6 text-center text-sm text-text-secondary">
-        No conversations found
-      </div>
-    )}
+      {noConversationsFound && (
+        <div className="p-6 text-center text-sm text-text-secondary">
+          No conversations found
+        </div>
+      )}
 
-    {!loading && !error && filteredConversations.map((conversation) => {
-      const otherUser = conversation.otherUser;
-      if (!otherUser) return null;
+      {!loading && !error && filteredConversations.map((conversation) => {
+        const otherUser = conversation.otherUser;
+        if (!otherUser) return null;
 
-      const isSelected = conversation.id === selectedConversationId;
-      const preview = conversation.lastMessage || 'No messages yet';
+        const isSelected = conversation.id === selectedConversationId;
+        const preview = conversation.lastMessage || 'No messages yet';
 
-      return (
-        <ConversationItem
-          key={conversation.id}
-          conversation={conversation}
-          isSelected={isSelected}
-          onSelectConversation={onSelectConversation}
-          otherUser={otherUser}
-          formatTime={formatTime}
-          onDeleteConversation={onDeleteConversation}
-          preview={preview}
-        />
-      );
-    })}
-
-
-  </div>)
-}
-
+        return (
+          <ConversationItem
+            key={conversation.id}
+            conversation={conversation}
+            isSelected={isSelected}
+            onSelectConversation={onSelectConversation}
+            otherUser={otherUser}
+            formatTime={formatTime}
+            onDeleteConversation={onDeleteConversation}
+            preview={preview}
+          />
+        );
+      })}
+    </div>
+  );
+};
 
 const ErrorConversations = ({ error }: { error: string }) => (
   <div className="p-6 text-center text-sm text-error">{error}</div>
 );
-
 
 const LoadingConversations = () => (
   <div className="p-6 text-center text-sm text-text-secondary">
@@ -285,11 +225,19 @@ interface ConversationItemProps {
   onSelectConversation: (id: string) => void;
   otherUser: ChatUser;
   formatTime: (timestamp: string) => string;
-  onDeleteConversation?: (conversationId: string) => Promise<void>;
   preview: string;
+  onDeleteConversation?: (conversationId: string) => Promise<void>;
 }
 
-const ConversationItem = ({ conversation, isSelected, onSelectConversation, otherUser, formatTime, onDeleteConversation, preview }: ConversationItemProps) => {
+const ConversationItem = ({
+  conversation,
+  isSelected,
+  onSelectConversation,
+  otherUser,
+  formatTime,
+  onDeleteConversation,
+  preview,
+}: ConversationItemProps) => {
   return (
     <div
       key={conversation.id}
@@ -304,7 +252,7 @@ const ConversationItem = ({ conversation, isSelected, onSelectConversation, othe
       className={`w-full text-left px-3 py-3 flex items-center gap-3 transition-colors cursor-pointer ${isSelected
         ? 'bg-primary/10 border-l-2 border-l-primary'
         : 'border-l-2 border-l-transparent hover:bg-surface/50'
-        }`}
+      }`}
     >
       <Avatar
         initials={otherUser.avatar}
@@ -345,5 +293,31 @@ const ConversationItem = ({ conversation, isSelected, onSelectConversation, othe
         </button>
       )}
     </div>
-  )
-}
+  );
+};
+
+const SearchBar = ({
+  searchQuery,
+  setSearchQuery,
+}: {
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+}) => {
+  return (
+    <div className="px-3 py-3 shrink-0">
+      <div className="relative">
+        <Search
+          size={16}
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"
+        />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search conversations..."
+          className="w-full bg-surface border-none rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+    </div>
+  );
+};

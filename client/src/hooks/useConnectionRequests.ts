@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { authFetch } from '@/lib/authFetch';
 import type { ConnectionRequest } from '@/types/chat';
 
@@ -7,7 +7,7 @@ export function useConnectionRequests(userId: string | null) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const loadConnectionRequests = async () => {
+  const loadConnectionRequests = useCallback(async () => {
     if (!userId) return;
 
     setError('');
@@ -34,7 +34,7 @@ export function useConnectionRequests(userId: string | null) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   const acceptRequest = async (requestId: string) => {
     const response = await authFetch('/api/connection-requests', {
