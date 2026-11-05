@@ -51,8 +51,9 @@ const server = http.createServer(async (req, res) => {
       responseHandler.successResponse(res, output);
     }
   } catch (error) {
-    if (!isProduction) {
-      console.error(error);
+    console.error(`[${req.method} ${pathname}]`, error?.message || error);
+    if (!isProduction && error?.stack) {
+      console.error(error.stack);
     }
 
     if (!res.headersSent) {

@@ -49,14 +49,22 @@ async function getProfilesByIds(ids, accessToken) {
     .select(PUBLIC_COLUMNS)
     .in("id", ids);
 
-  if (error) throw error;
+  if (error) {
+    // public_user_profiles is created by the chat migration; degrade gracefully
+    // if it is missing so request create/list still work.
+    console.warn("public_user_profiles lookup failed:", error.message);
+    return new Map();
+  }
 
   return new Map((data || []).map((row) => [row.id, mapUser(row)]));
 }
 
 async function requestWithProfile(row, otherUserId, accessToken) {
   const profiles = await getProfilesByIds([otherUserId], accessToken);
-  return mapRequest(row, profiles.get(otherUserId) || mapUser({ id: otherUserId }));
+  return mapRequest(
+    row,
+    profiles.get(otherUserId) || mapUser({ id: otherUserId, username: "", full_name: "Unknown user" })
+  );
 }
 
 async function findExistingConversation(userId, otherUserId, accessToken) {
