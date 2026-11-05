@@ -57,6 +57,7 @@ export default function SignupPage() {
       // Call external server for authentication
       const response = await fetch(`${SERVER_URL}/api/auth/signup`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -75,10 +76,10 @@ export default function SignupPage() {
         return;
       }
 
-      const sessionData = data?.data?.session ?? data?.session;
-
       // When email confirmation is disabled Supabase returns a session,
       // so sign the browser in and go straight to the dashboard.
+      const sessionData = data?.data?.session ?? data?.session;
+
       if (sessionData?.access_token && sessionData?.refresh_token) {
         const { error: sessionError } = await supabase.auth.setSession({
           access_token: sessionData.access_token,

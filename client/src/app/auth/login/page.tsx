@@ -64,6 +64,7 @@ export default function LoginPage() {
       // Call external server for authentication
       const response = await fetch(`${SERVER_URL}/api/auth/signin`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -91,6 +92,9 @@ export default function LoginPage() {
           setError("Could not start your session. Please try again.");
           return;
         }
+      } else {
+        setError("Authentication failed. Please try again.");
+        return;
       }
 
       // rememberMe is retained as UI state
@@ -234,4 +238,4 @@ export default function LoginPage() {
       </AuthLayout>
     </div>
   );
-}
+}
