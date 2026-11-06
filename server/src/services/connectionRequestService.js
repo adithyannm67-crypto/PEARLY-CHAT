@@ -155,10 +155,9 @@ export async function listConnectionRequests(
 export async function createConnectionRequest(userId, receiverId, accessToken) {
   const db = supabaseAuth(accessToken);
 
-  console.log("[Connection Request] Creating request:", {
-    senderId: userId,
-    receiverId,
-  });
+  if (userId === receiverId) {
+    throw new HttpError(400, "You cannot connect with yourself");
+  }
 
   if (await findExistingConversation(userId, receiverId, accessToken)) {
     throw new HttpError(409, "You are already connected with this user");
