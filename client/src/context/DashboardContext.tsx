@@ -11,7 +11,6 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSupabase } from '@/context/AuthProvider';
-import { authFetch } from '@/lib/authFetch';
 import type { ChatUser, ConnectionRequest, Conversation } from '@/types/chat';
 import { usePresence } from '@/hooks/usePresence';
 import { useConversations } from '@/hooks/useConversations';
@@ -128,33 +127,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const [requestHistory, setRequestHistory] = useState<ConnectionRequest[]>([]);
 
-  const loadRequestHistory = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const [incomingResponse, outgoingResponse] = await Promise.all([
-        authFetch('/api/connection-requests?direction=incoming&status=all', {
-          cache: 'no-store',
-        }),
-        authFetch('/api/connection-requests?direction=outgoing&status=all', {
-          cache: 'no-store',
-        }),
-      ]);
-      const incomingData = await incomingResponse.json();
-      const outgoingData = await outgoingResponse.json();
-
-      const incoming = incomingData.data?.requests ?? [];
-      const outgoing = outgoingData.data?.requests ?? [];
-
-      setRequestHistory(
-        [...incoming, ...outgoing].sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        )
-      );
-    } catch {
-      // Keep history best-effort.
-    }
-  }, [userId]);
+  const loadRequestHistory = useCallback(() => {
+    const all = [
+      ...connectionRequests.map((r) => ({ ...r, direction: 'incoming' as const })),
+      ...sentConnectionRequests.map((r) => ({ ...r, direction: 'outgoing' as const })),
+    ];
+    setRequestHistory(
+      all.sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+    );
+  }, [connectionRequests, sentConnectionRequests]);
 
   useEffect(() => {
     void loadRequestHistory();

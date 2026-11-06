@@ -14,17 +14,17 @@ export function useSentConnectionRequests(userId: string | null) {
     setLoading(true);
 
     try {
-      const response = await authFetch(
-        '/api/connection-requests?direction=outgoing',
-        { cache: 'no-store' }
-      );
+      const response = await authFetch('/api/connection-requests/history', {
+        cache: 'no-store',
+      });
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load sent connection requests');
       }
 
-      setRequests(data.data?.requests ?? []);
+      const allRequests = (data.data?.requests ?? []) as ConnectionRequest[];
+      setRequests(allRequests.filter((r) => r.senderId === userId));
     } catch (err) {
       setError(
         err instanceof Error
