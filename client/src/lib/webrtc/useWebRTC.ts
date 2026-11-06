@@ -63,6 +63,7 @@ export function useWebRTC({
   const localUserId = useRef<string | null>(userId);
   const isOffererRef = useRef(false);
   const peerJoinedRef = useRef(false);
+  const peerUserIdRef = useRef<string | null>(null);
   const negotiationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -136,12 +137,33 @@ export function useWebRTC({
         if (participantCount >= 2 && !peerJoinedRef.current) {
           peerJoinedRef.current = true;
         }
+        // If we reconnected and have a peer, trigger negotiation
+        if (
+          participantCount >= 2 &&
+          peerJoinedRef.current &&
+          peerUserIdRef.current &&
+          peerManagerRef.current
+        ) {
+          console.log('[WebRTC] Re-joined room with peer, triggering negotiation retry');
+          if (
+            localUserId.current &&
+            peerUserIdRef.current &&
+            localUserId.current < peerUserIdRef.current &&
+            peerManagerRef.current
+          ) {
+            isOffererRef.current = true;
+            void peerManagerRef.current.createOffer(_conversationId).catch((err) => {
+              console.error('[WebRTC] Re-connect create offer error:', err);
+            });
+          }
+        }
       },
       onPeerJoined: (_conversationId, peerUserId) => {
         console.log(
           `[WebRTC] Peer joined: ${peerUserId}, I am offerer: ${localUserId.current ? localUserId.current < peerUserId : 'unknown'}`,
         );
         peerJoinedRef.current = true;
+        peerUserIdRef.current = peerUserId;
         setConnectionState('negotiating');
         clearNegotiationTimeout();
 
@@ -206,6 +228,11 @@ export function useWebRTC({
         setConnectionState('connecting');
         if (peerManagerRef.current) {
           await peerManagerRef.current.flushSignaledCandidates();
+        }
+        // Re-join room if we were in a conversation
+        if (currentConversationId.current) {
+          console.log('[WebRTC] Re-joining room after reconnect:', currentConversationId.current);
+          client.joinRoom(currentConversationId.current);
         }
       },
       onDisconnect: () => {

@@ -176,6 +176,15 @@ async function handleJoinRoom(socket, payload) {
       userId: socket.userId,
     });
   }
+
+  // Notify the joining socket about existing participants (reconnect scenario)
+  for (const other of others) {
+    send(socket, {
+      type: "PEER_JOINED",
+      conversationId,
+      userId: other.userId,
+    });
+  }
 }
 
 function handleLeaveRoom(socket, payload) {

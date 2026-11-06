@@ -101,10 +101,16 @@ class SignalingClient {
   }
 
   async connect(token?: string): Promise<void> {
-    if (this.isConnecting || this.isConnected()) {
+    if (this.isConnecting) {
       return;
     }
 
+    // If already connected, nothing to do
+    if (this.isConnected()) {
+      return;
+    }
+
+    // If we were in failed state, reset for reconnection attempt
     this.isConnecting = true;
     this.setState('connecting');
     this.authenticated = false;
@@ -148,6 +154,12 @@ class SignalingClient {
 
         ws.onerror = (err) => {
           console.error('[signaling] WebSocket error:', err);
+          // Close the socket to trigger onclose and reconnect logic
+          try {
+            ws.close();
+          } catch {
+            // ignore close errors
+          }
           this.setState('failed');
           this.handlers.onError?.('CONNECTION_ERROR', 'WebSocket connection failed');
         };
