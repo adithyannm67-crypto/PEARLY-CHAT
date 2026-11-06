@@ -55,10 +55,15 @@ export function usePresence(userId: string | null): UsePresenceReturn {
       ({ newPresences }) => {
         setOnlineUsers((prev) => {
           const next = new Map(prev);
-          for (const [, presences] of Object.entries(newPresences)) {
-            for (const presence of presences as unknown as UserPresence[]) {
-              if (presence.user_id && presence.user_id !== userId) {
-                next.set(presence.user_id, true);
+          if (!newPresences) return next;
+          for (const presences of Object.values(newPresences)) {
+            const presenceList = Array.isArray(presences)
+              ? presences
+              : [presences];
+            for (const presence of presenceList) {
+              const p = presence as unknown as UserPresence;
+              if (p.user_id && p.user_id !== userId) {
+                next.set(p.user_id, true);
               }
             }
           }
@@ -74,10 +79,15 @@ export function usePresence(userId: string | null): UsePresenceReturn {
       ({ leftPresences }) => {
         setOnlineUsers((prev) => {
           const next = new Map(prev);
-          for (const [, presences] of Object.entries(leftPresences)) {
-            for (const presence of presences as unknown as UserPresence[]) {
-              if (presence.user_id) {
-                next.delete(presence.user_id);
+          if (!leftPresences) return next;
+          for (const presences of Object.values(leftPresences)) {
+            const presenceList = Array.isArray(presences)
+              ? presences
+              : [presences];
+            for (const presence of presenceList) {
+              const p = presence as unknown as UserPresence;
+              if (p.user_id) {
+                next.delete(p.user_id);
               }
             }
           }
