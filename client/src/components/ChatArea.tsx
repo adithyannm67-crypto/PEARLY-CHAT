@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useEffect, useRef } from 'react';
 import {
   MessageCircle,
@@ -17,45 +16,10 @@ import { authFetch } from '@/lib/authFetch';
 import { useWebRTC } from '@/lib/webrtc/useWebRTC';
 import ConnectionStatus from '@/components/webrtc/ConnectionStatus';
 import type { Conversation, Message } from '@/types/chat';
+import { formatMessageTime, formatDateLabel, getDateKey } from '@/lib/utils/formatDate-time';
 
-function getDateKey(ts: string): string {
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return '';
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
-function formatDateLabel(dateKey: string): string {
-  if (!dateKey) return '';
-  const [yearStr, monthStr, dayStr] = dateKey.split('-');
-  const targetDate = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
 
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const targetStart = targetDate.getTime();
-  const diffDays = Math.round((todayStart - targetStart) / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-
-  return targetDate.toLocaleDateString('en-US', {
-    month: 'short',
-    day: '2-digit',
-    year: 'numeric',
-  });
-}
-
-function formatMessageTime(ts: string): string {
-  const date = new Date(ts);
-  if (isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
 
 export default function ChatArea() {
   const { userId, selectedConversation, handleBack, onlineUsers } = useDashboard();
@@ -184,20 +148,7 @@ export default function ChatArea() {
   // Empty State (when no selectedConversation is selected)
   if (!selectedConversationId || !selectedConversation || !otherUser) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-bg-main h-full">
-        <div className="flex flex-col items-center text-center p-6 select-none">
-          {/* Decorative circle */}
-          <div className="w-24 h-24 rounded-full bg-surface/50 flex items-center justify-center mb-6">
-            <MessageCircle size={40} className="text-text-secondary/30" />
-          </div>
-          <h2 className="text-xl font-semibold text-text-primary mt-2">
-            Welcome to Peerly
-          </h2>
-          <p className="text-sm text-text-secondary mt-1">
-            Select a selectedConversation to start chatting
-          </p>
-        </div>
-      </div>
+      <EmptyChat />
     );
   }
 
@@ -315,22 +266,19 @@ export default function ChatArea() {
 
               {/* Message row */}
               <div
-                className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'} ${
-                  isFirstInGroup ? 'mt-3' : 'mt-1'
-                }`}
+                className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-3' : 'mt-1'
+                  }`}
               >
                 <div
-                  className={`flex flex-col ${
-                    isSent ? 'items-end' : 'items-start'
-                  } max-w-[70%]`}
+                  className={`flex flex-col ${isSent ? 'items-end' : 'items-start'
+                    } max-w-[70%]`}
                 >
                   {/* Bubble */}
                   <div
-                    className={`px-4 py-2 w-fit break-words text-sm leading-relaxed ${
-                      isSent
-                        ? 'bg-primary text-white rounded-2xl rounded-br-sm'
-                        : 'bg-surface text-text-primary rounded-2xl rounded-bl-sm'
-                    }`}
+                    className={`px-4 py-2 w-fit break-words text-sm leading-relaxed ${isSent
+                      ? 'bg-primary text-white rounded-2xl rounded-br-sm'
+                      : 'bg-surface text-text-primary rounded-2xl rounded-bl-sm'
+                      }`}
                   >
                     {msg.content}
                   </div>
@@ -342,11 +290,10 @@ export default function ChatArea() {
                     </span>
                     {isSent && (
                       <span
-                        className={`text-[10px] ${
-                          msg.status === 'read'
-                            ? 'text-primary'
-                            : 'text-text-secondary/50'
-                        }`}
+                        className={`text-[10px] ${msg.status === 'read'
+                          ? 'text-primary'
+                          : 'text-text-secondary/50'
+                          }`}
                       >
                         {msg.status === 'sent' ? '✓' : '✓✓'}
                       </span>
@@ -409,11 +356,10 @@ export default function ChatArea() {
               !messageInput.trim() || !isDataChannelOpen || !userId
             }
             aria-label="Send message"
-            className={`p-2.5 rounded-full transition-all ${
-              messageInput.trim() && isDataChannelOpen && userId
-                ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
-                : 'bg-surface text-text-secondary cursor-not-allowed'
-            }`}
+            className={`p-2.5 rounded-full transition-all ${messageInput.trim() && isDataChannelOpen && userId
+              ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
+              : 'bg-surface text-text-secondary cursor-not-allowed'
+              }`}
           >
             <SendHorizontal size={18} />
           </button>
@@ -421,4 +367,24 @@ export default function ChatArea() {
       </div>
     </div>
   );
+}
+
+const EmptyChat = () => {
+
+
+
+  return (<div className="flex-1 flex items-center justify-center bg-bg-main h-full">
+    <div className="flex flex-col items-center text-center p-6 select-none">
+      {/* Decorative circle */}
+      <div className="w-24 h-24 rounded-full bg-surface/50 flex items-center justify-center mb-6">
+        <MessageCircle size={40} className="text-text-secondary/30" />
+      </div>
+      <h2 className="text-xl font-semibold text-text-primary mt-2">
+        Welcome to Peerly
+      </h2>
+      <p className="text-sm text-text-secondary mt-1">
+        Select a selectedConversation to start chatting
+      </p>
+    </div>
+  </div>)
 }

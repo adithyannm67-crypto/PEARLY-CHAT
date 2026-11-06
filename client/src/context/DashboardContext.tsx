@@ -162,7 +162,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
-  const [requestsOpen, setRequestsOpen] = useState(true);
+  const [requestsOpen, setRequestsOpen] = useState(false);
   const [requestTab, setRequestTab] = useState<'incoming' | 'sent' | 'history'>('incoming');
   const [historyTab, setHistoryTab] = useState<'received' | 'sent'>('received');
   const [activeModal, setActiveModal] = useState<'new-chat' | 'settings' | null>(null);
