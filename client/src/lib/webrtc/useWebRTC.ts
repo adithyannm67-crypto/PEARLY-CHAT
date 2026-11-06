@@ -63,6 +63,9 @@ export function useWebRTC({
   const localUserId = useRef<string | null>(userId);
   const isOffererRef = useRef(false);
   const peerJoinedRef = useRef(false);
+  const negotiationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const addMessage = useCallback((message: DataChannelMessage) => {
     setMessages((prev) => {
@@ -71,6 +74,45 @@ export function useWebRTC({
       return [...prev, message];
     });
   }, []);
+
+  const clearNegotiationTimeout = useCallback(() => {
+    if (negotiationTimeoutRef.current) {
+      clearTimeout(negotiationTimeoutRef.current);
+      negotiationTimeoutRef.current = null;
+    }
+  }, []);
+
+  const retryNegotiation = useCallback(() => {
+    if (
+      !conversationId ||
+      !userId ||
+      !peerManagerRef.current ||
+      isDataChannelOpen ||
+      connectionState === 'connected'
+    ) {
+      return;
+    }
+
+    console.log('[WebRTC] Retrying negotiation...');
+
+    if (
+      localUserId.current &&
+      peerJoinedRef.current &&
+      peerManagerRef.current
+    ) {
+      isOffererRef.current = true;
+      void peerManagerRef.current.createOffer(conversationId).catch((err) => {
+        console.error('[WebRTC] Retry create offer error:', err);
+      });
+    }
+  }, [
+    conversationId,
+    userId,
+    isDataChannelOpen,
+    connectionState,
+    localUserId.current,
+    peerJoinedRef,
+  ]);
 
   useEffect(() => {
     const client = getSignalingClient();
@@ -96,9 +138,14 @@ export function useWebRTC({
         }
       },
       onPeerJoined: (_conversationId, peerUserId) => {
-        console.log(`[WebRTC] Peer joined: ${peerUserId}, I am offerer: ${localUserId.current ? localUserId.current < peerUserId : 'unknown'}`);
+        console.log(
+          `[WebRTC] Peer joined: ${peerUserId}, I am offerer: ${localUserId.current ? localUserId.current < peerUserId : 'unknown'}`,
+        );
         peerJoinedRef.current = true;
         setConnectionState('negotiating');
+        clearNegotiationTimeout();
+
+        // If we are the offerer (smaller userId), create offer immediately
         if (
           localUserId.current &&
           peerUserId &&
@@ -106,12 +153,20 @@ export function useWebRTC({
           peerManagerRef.current
         ) {
           isOffererRef.current = true;
-          void peerManagerRef.current.createOffer(_conversationId).catch((err) => {
-            console.error('[WebRTC] Create offer error:', err);
-          });
+          void peerManagerRef.current
+            .createOffer(_conversationId)
+            .catch((err) => {
+              console.error('[WebRTC] Create offer error:', err);
+            });
         } else {
           console.log(`[WebRTC] Waiting for offer from peer`);
         }
+
+        // Fallback: if still negotiating after 8 seconds, retry
+        negotiationTimeoutRef.current = setTimeout(() => {
+          console.log('[WebRTC] Negotiation timeout, retrying...');
+          retryNegotiation();
+        }, 8000);
       },
       onPeerLeft: () => {
         peerJoinedRef.current = false;
@@ -198,6 +253,7 @@ export function useWebRTC({
     });
 
     return () => {
+      clearNegotiationTimeout();
       client.disconnect();
       manager.close();
       channelMgr.close();
@@ -205,7 +261,7 @@ export function useWebRTC({
       peerManagerRef.current = null;
       dataChannelRef.current = null;
     };
-  }, [addMessage]);
+  }, [addMessage, clearNegotiationTimeout, retryNegotiation, iceConfig]);
 
   useEffect(() => {
     localUserId.current = userId;
