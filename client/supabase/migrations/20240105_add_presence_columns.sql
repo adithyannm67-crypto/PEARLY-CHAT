@@ -30,7 +30,8 @@ BEGIN
 END $$;
 
 -- Recreate public_user_profiles view to include presence columns.
-CREATE OR REPLACE VIEW public.public_user_profiles AS
+DROP VIEW IF EXISTS public.public_user_profiles;
+CREATE VIEW public.public_user_profiles AS
 SELECT id, username, avatar_url, full_name, created_at, is_online, last_seen
 FROM public.users;
 
