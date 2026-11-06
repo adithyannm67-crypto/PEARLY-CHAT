@@ -228,15 +228,9 @@ export default function ChatArea() {
         <div className="flex-1 min-w-0">
           <h2 className="font-medium text-text-primary truncate">{otherUser.name}</h2>
           <p className="text-xs">
-            {onlineUsers.get(otherUser.id) === true && (
+            {onlineUsers.get(otherUser.id) === true ? (
               <span className="text-online font-medium">Online</span>
-            )}
-            {onlineUsers.get(otherUser.id) === false && (
-              <span className="text-text-secondary">
-                {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
-              </span>
-            )}
-            {onlineUsers.get(otherUser.id) === undefined && (
+            ) : (
               <span className="text-text-secondary">
                 {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
               </span>
