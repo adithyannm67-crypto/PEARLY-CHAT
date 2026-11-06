@@ -10,14 +10,15 @@ interface SidebarHeaderProps {
     sentConnectionRequests: ConnectionRequest[];
     handleLogout: () => void;
     setActiveModal: (modal: 'new-chat' | 'settings' | null) => void;
+    isOwnOnline: boolean;
 }
-const SidebarHeader = ({ currentUser, setRequestsOpen, connectionRequests, sentConnectionRequests, handleLogout, setActiveModal }: SidebarHeaderProps) => {
+const SidebarHeader = ({ currentUser, setRequestsOpen, connectionRequests, sentConnectionRequests, handleLogout, setActiveModal, isOwnOnline }: SidebarHeaderProps) => {
     return (<header className="h-16 bg-bg-secondary border-b border-border-custom px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
             <Avatar
                 initials={currentUser?.avatar ?? '?'}
                 size="sm"
-                showOnline
+                showOnline={isOwnOnline}
             />
             <span className="font-semibold text-lg text-text-primary">Chats</span>
         </div>

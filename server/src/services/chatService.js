@@ -1,7 +1,7 @@
 import supabaseAuth from "#config/supabase-auth.js";
 
-const USER_OWN_COLUMNS = "id, email, username, avatar_url, full_name, created_at";
-const USER_PUBLIC_COLUMNS = "id, username, avatar_url, full_name, created_at";
+const USER_OWN_COLUMNS = "id, email, username, avatar_url, full_name, is_online, last_seen, created_at";
+const USER_PUBLIC_COLUMNS = "id, username, avatar_url, full_name, is_online, last_seen, created_at";
 const MESSAGE_COLUMNS = "id, conversation_id, sender_id, content, created_at";
 
 function getInitials(name, username) {
@@ -24,8 +24,8 @@ function mapUser(row) {
     username: row.username || "",
     email: row.email || "",
     avatar: getInitials(row.full_name, row.username),
-    status: "offline",
-    lastSeen: "",
+    status: row.is_online ? "online" : "offline",
+    lastSeen: row.last_seen || "",
   };
 }
 
@@ -182,6 +182,14 @@ export async function updateUser(userId, updates, accessToken) {
 
   if (updates.username !== undefined) {
     payload.username = updates.username.trim().toLowerCase();
+  }
+
+  if (updates.is_online !== undefined) {
+    payload.is_online = updates.is_online;
+  }
+
+  if (updates.last_seen !== undefined) {
+    payload.last_seen = updates.last_seen;
   }
 
   if (Object.keys(payload).length === 0) {

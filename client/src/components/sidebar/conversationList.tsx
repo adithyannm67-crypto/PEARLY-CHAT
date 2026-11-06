@@ -15,6 +15,7 @@ const ConversationList = ({
   selectedConversationId,
   onSelectConversation,
   onDeleteConversation,
+  onlineUsers,
 }: {
   error: string;
   loading: boolean;
@@ -23,6 +24,7 @@ const ConversationList = ({
   selectedConversationId: string | null;
   onSelectConversation: (id: string) => void;
   onDeleteConversation?: (conversationId: string) => Promise<void>;
+  onlineUsers: Map<string, boolean>;
 }) => {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -51,6 +53,7 @@ const ConversationList = ({
             onSelectConversation={onSelectConversation}
             otherUser={otherUser}
             formatTime={formatTime}
+            onlineUsers={onlineUsers}
             onDeleteConversation={onDeleteConversation}
             preview={preview}
           />
@@ -81,6 +84,7 @@ interface ConversationItemProps {
   otherUser: ChatUser;
   formatTime: (timestamp: string) => string;
   preview: string;
+  onlineUsers: Map<string, boolean>;
   onDeleteConversation?: (conversationId: string) => Promise<void>;
 }
 
@@ -90,6 +94,7 @@ const ConversationItem = ({
   onSelectConversation,
   otherUser,
   formatTime,
+  onlineUsers,
   onDeleteConversation,
   preview,
 }: ConversationItemProps) => {
@@ -112,7 +117,7 @@ const ConversationItem = ({
       <Avatar
         initials={otherUser.avatar}
         size="md"
-        showOnline={otherUser.status === 'online'}
+        showOnline={onlineUsers.get(otherUser.id) === true}
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">

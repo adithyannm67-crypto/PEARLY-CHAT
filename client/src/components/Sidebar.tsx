@@ -34,6 +34,8 @@ export default function Sidebar() {
     setRequestsOpen,
     activeModal,
     setActiveModal,
+    onlineUsers,
+    isOwnOnline,
   } = useDashboard();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,14 +57,15 @@ export default function Sidebar() {
 
   return (
     <aside className="relative flex flex-col h-full bg-bg-secondary select-none md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom">
-      <SidebarHeader
-        currentUser={currentUser}
-        setRequestsOpen={setRequestsOpen}
-        connectionRequests={requestsToShow}
-        sentConnectionRequests={sentConnectionRequests}
-        handleLogout={handleLogout}
-        setActiveModal={setActiveModal}
-      />
+          <SidebarHeader
+            currentUser={currentUser}
+            setRequestsOpen={setRequestsOpen}
+            connectionRequests={requestsToShow}
+            sentConnectionRequests={sentConnectionRequests}
+            handleLogout={handleLogout}
+            setActiveModal={setActiveModal}
+            isOwnOnline={isOwnOnline}
+          />
       <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
       {requestsOpen && (
@@ -79,6 +82,7 @@ export default function Sidebar() {
         selectedConversationId={selectedConversationId}
         onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
+        onlineUsers={onlineUsers}
       />
 
       {activeModal === 'new-chat' && currentUser && (

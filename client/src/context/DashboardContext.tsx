@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 import { useSupabase } from '@/context/AuthProvider';
 import { authFetch } from '@/lib/authFetch';
 import type { ChatUser, ConnectionRequest, Conversation } from '@/types/chat';
+import { usePresence } from '@/hooks/usePresence';
 import { useConversations } from '@/hooks/useConversations';
 import { useConnectionRequests } from '@/hooks/useConnectionRequests';
 import { useSentConnectionRequests } from '@/hooks/useSentConnectionRequests';
@@ -26,6 +27,10 @@ interface DashboardContextValue {
 
   userId: string | null;
   currentUser: ChatUser | null;
+
+  onlineUsers: Map<string, boolean>;
+  setOwnStatus: (isOnline: boolean) => Promise<void>;
+  isOwnOnline: boolean;
 
   conversations: Conversation[];
   setConversations: (value: Conversation[] | ((prev: Conversation[]) => Conversation[])) => void;
@@ -89,6 +94,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { session, loading: authLoading, signOut, supabase } = useSupabase();
   const userId = session?.user?.id ?? null;
+
+  const { onlineUsers, setOwnStatus, isOwnOnline } = usePresence(userId);
 
   const {
     conversations,
@@ -225,7 +232,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         username: (sessionUser?.user_metadata?.username as string | undefined) || '',
         email: sessionUser?.email || '',
         avatar: getInitials(sessionName),
-        status: 'online',
+        status: isOwnOnline ? 'online' : 'offline',
         lastSeen: '',
       }
     : null;
@@ -252,6 +259,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       router,
       userId,
       currentUser: conversationsCurrentUser,
+      onlineUsers,
+      setOwnStatus,
+      isOwnOnline,
       conversations,
       setConversations,
       loading,
@@ -308,6 +318,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       router,
       userId,
       conversationsCurrentUser,
+      onlineUsers,
+      setOwnStatus,
+      isOwnOnline,
       conversations,
       setConversations,
       loading,

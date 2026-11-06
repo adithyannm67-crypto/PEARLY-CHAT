@@ -65,7 +65,7 @@ function formatMessageTime(ts: string): string {
 }
 
 export default function ChatArea() {
-  const { userId, selectedConversation, handleBack } = useDashboard();
+  const { userId, selectedConversation, handleBack, onlineUsers } = useDashboard();
   const { supabase } = useSupabase();
   const [messageInput, setMessageInput] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
@@ -237,20 +237,22 @@ export default function ChatArea() {
         <Avatar
           initials={otherUser.avatar}
           size="md"
-          showOnline={otherUser.status === 'online'}
+          showOnline={onlineUsers.get(otherUser.id) === true}
         />
 
         {/* Info section */}
         <div className="flex-1 min-w-0">
           <h2 className="font-medium text-text-primary truncate">{otherUser.name}</h2>
           <p className="text-xs">
-            {otherUser.status === 'online' && (
+            {onlineUsers.get(otherUser.id) === true && (
               <span className="text-online font-medium">Online</span>
             )}
-            {otherUser.status === 'away' && (
-              <span className="text-yellow-400 font-medium">Away</span>
+            {onlineUsers.get(otherUser.id) === false && (
+              <span className="text-text-secondary">
+                {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
+              </span>
             )}
-            {otherUser.status === 'offline' && (
+            {onlineUsers.get(otherUser.id) === undefined && (
               <span className="text-text-secondary">
                 {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
               </span>

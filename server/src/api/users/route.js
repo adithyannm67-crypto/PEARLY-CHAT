@@ -28,6 +28,9 @@ export default async function handler(req) {
     const name = typeof body.name === "string" ? body.name.trim() : undefined;
     const username =
       typeof body.username === "string" ? body.username.trim().toLowerCase() : undefined;
+    const isOnline = typeof body.is_online === "boolean" ? body.is_online : undefined;
+    const lastSeen =
+      typeof body.last_seen === "string" ? body.last_seen : undefined;
 
     if (name !== undefined && !name) {
       throw new HttpError(400, "Name cannot be empty");
@@ -40,13 +43,20 @@ export default async function handler(req) {
       );
     }
 
-    if (name === undefined && username === undefined) {
+    if (
+      name === undefined &&
+      username === undefined &&
+      isOnline === undefined &&
+      lastSeen === undefined
+    ) {
       throw new HttpError(400, "No profile fields to update");
     }
 
     const updates = {};
     if (name !== undefined) updates.full_name = name;
     if (username !== undefined) updates.username = username;
+    if (isOnline !== undefined) updates.is_online = isOnline;
+    if (lastSeen !== undefined) updates.last_seen = lastSeen;
 
     return { user: await updateUser(user.id, updates, accessToken) };
   }
