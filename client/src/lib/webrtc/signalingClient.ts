@@ -49,6 +49,9 @@ class SignalingClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isConnecting = false;
   private shouldReconnect = true;
+  private authenticated: boolean = false;
+  private authenticatedResolve: (() => void) | null = null;
+  private authenticatedPromise: Promise<void> | null = null;
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
@@ -62,6 +65,23 @@ class SignalingClient {
 
   isConnected(): boolean {
     return this.state === 'connected' && this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  isAuthenticated(): boolean {
+    return this.authenticated;
+  }
+
+  waitForAuthenticated(): Promise<void> {
+    if (this.authenticated) {
+      return Promise.resolve();
+    }
+    if (this.authenticatedPromise) {
+      return this.authenticatedPromise;
+    }
+    this.authenticatedPromise = new Promise((resolve) => {
+      this.authenticatedResolve = resolve;
+    });
+    return this.authenticatedPromise;
   }
 
   private setState(state: ConnectionState) {
@@ -87,6 +107,9 @@ class SignalingClient {
 
     this.isConnecting = true;
     this.setState('connecting');
+    this.authenticated = false;
+    this.authenticatedPromise = null;
+    this.authenticatedResolve = null;
 
     const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
 
@@ -159,6 +182,12 @@ class SignalingClient {
   private handleMessage(message: SignalingEvent) {
     switch (message.type) {
       case 'AUTHENTICATED':
+        this.authenticated = true;
+        if (this.authenticatedResolve) {
+          this.authenticatedResolve();
+          this.authenticatedResolve = null;
+          this.authenticatedPromise = null;
+        }
         this.handlers.onAuthenticated?.(message.userId);
         break;
       case 'ROOM_JOINED':
@@ -186,6 +215,7 @@ class SignalingClient {
         );
         break;
       case 'ERROR':
+        console.error('[signaling] error:', message.code, message.message);
         this.handlers.onError?.(message.code, message.message);
         break;
     }
@@ -196,6 +226,9 @@ class SignalingClient {
     if (!effectiveToken) {
       return false;
     }
+    this.authenticated = false;
+    this.authenticatedPromise = null;
+    this.authenticatedResolve = null;
     return this.send({ type: 'AUTH', token: effectiveToken });
   }
 
@@ -238,6 +271,9 @@ class SignalingClient {
       this.ws.close();
       this.ws = null;
     }
+    this.authenticated = false;
+    this.authenticatedPromise = null;
+    this.authenticatedResolve = null;
     this.setState('disconnected');
   }
 }

@@ -227,6 +227,7 @@ export function useWebRTC({
 
       await client.connect(token);
       await client.authenticate(token);
+      await client.waitForAuthenticated();
       client.joinRoom(conversationId);
     } catch (err) {
       console.error('[webrtc] connect error:', err);
