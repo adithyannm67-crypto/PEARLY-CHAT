@@ -13,6 +13,7 @@
   
   "imports": {
     "#config/*":"./src/config/*",
+    "#services/*":"./src/services/*",
     "#utils/*":"./src/utils/*"
   },
   "dependencies": {
