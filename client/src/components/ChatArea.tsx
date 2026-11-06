@@ -27,7 +27,8 @@ function getDateKey(ts: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatDateLabel(dateKey: string): string {
+function formatDateLabel(dateString: string): string {
+  const dateKey= getDateKey(dateString);
   if (!dateKey) return '';
   const [yearStr, monthStr, dayStr] = dateKey.split('-');
   const targetDate = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
@@ -232,7 +233,7 @@ export default function ChatArea() {
               <span className="text-online font-medium">Online</span>
             ) : (
               <span className="text-text-secondary">
-                {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
+                {otherUser.lastSeen ? `Last seen ${formatDateLabel(otherUser.lastSeen)}` : 'Offline'}
               </span>
             )}
           </p>
