@@ -119,11 +119,7 @@ async function handleAuth(socket, payload) {
     return sendError(socket, "INVALID_TOKEN", "Invalid or expired session");
   }
 
-  socket.userId = user.id;
-  socket.accessToken = token;
-  socket.authenticated = true;
-
-  send(socket, { type: "AUTHENTICATED", userId: user.id });
+  completeAuth(socket, user, token);
 }
 
 async function handleJoinRoom(socket, payload) {
@@ -273,6 +269,9 @@ async function handleMessage(socket, raw) {
       return;
     }
 
+    // Wait for authentication to complete before processing any other event
+    await socket.authReady;
+
     if (!isAuthenticated(socket)) {
       return sendError(socket, "NOT_AUTHENTICATED", "Authentication required");
     }
@@ -309,16 +308,28 @@ export function setupSignaling(wss) {
     socket.authenticated = false;
     socket.rooms = new Set();
 
+    // Promise that resolves when authentication completes
+    let authResolve;
+    socket.authReady = new Promise((resolve) => {
+      authResolve = resolve;
+    });
+
+    const completeAuth = (user, token) => {
+      socket.userId = user.id;
+      socket.accessToken = token;
+      socket.authenticated = true;
+      authResolve();
+      send(socket, { type: "AUTHENTICATED", userId: user.id });
+    };
+
+    // Auto-authenticate from URL query param or cookie (reconnect scenario)
     (async () => {
       try {
         const token = extractToken(request);
         if (token) {
           const user = await authenticateUser(token);
           if (user) {
-            socket.userId = user.id;
-            socket.accessToken = token;
-            socket.authenticated = true;
-            send(socket, { type: "AUTHENTICATED", userId: user.id });
+            completeAuth(user, token);
           }
         }
       } catch (err) {
