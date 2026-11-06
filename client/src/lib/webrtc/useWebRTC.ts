@@ -142,8 +142,11 @@ export function useWebRTC({
         console.error('[webrtc] signaling error:', code, message);
         setConnectionState('failed');
       },
-      onConnect: () => {
+      onConnect: async () => {
         setConnectionState('connecting');
+        if (peerManagerRef.current) {
+          await peerManagerRef.current.flushSignaledCandidates();
+        }
       },
       onDisconnect: () => {
         setConnectionState('disconnected');

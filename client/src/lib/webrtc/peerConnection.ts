@@ -128,14 +128,29 @@ class PeerConnectionManager {
 
   private async sendIceCandidate(candidate: RTCIceInitLocal) {
     const client = getSignalingClient();
-    if (!client || !this.conversationId || !client.isConnected()) return;
+    if (!client || !this.conversationId) return;
 
-    client.sendIceCandidate(
-      this.conversationId,
-      candidate.candidate ?? undefined,
-      candidate.sdpMid ?? undefined,
-      candidate.sdpMLineIndex ?? undefined,
-    );
+    try {
+      if (!client.isConnected()) {
+        // Queue for later delivery; ICE will regather if needed
+        this.iceCandidateQueue.push(candidate);
+        return;
+      }
+
+      const sent = client.sendIceCandidate(
+        this.conversationId,
+        candidate.candidate ?? undefined,
+        candidate.sdpMid ?? undefined,
+        candidate.sdpMLineIndex ?? undefined,
+      );
+
+      if (!sent) {
+        this.iceCandidateQueue.push(candidate);
+      }
+    } catch {
+      // Socket may have closed mid-send; queue for retry
+      this.iceCandidateQueue.push(candidate);
+    }
   }
 
   async createOffer(conversationId: string): Promise<string> {
@@ -177,7 +192,11 @@ class PeerConnectionManager {
 
       const client = getSignalingClient();
       if (client && client.isConnected()) {
-        client.sendOffer(conversationId, offerSdp);
+        try {
+          client.sendOffer(conversationId, offerSdp);
+        } catch {
+          // Socket closed mid-negotiation; ICE candidates are queued
+        }
       }
 
       this.setState('connecting');
@@ -225,7 +244,11 @@ class PeerConnectionManager {
 
       const client = getSignalingClient();
       if (client && client.isConnected()) {
-        client.sendAnswer(conversationId, answerSdp);
+        try {
+          client.sendAnswer(conversationId, answerSdp);
+        } catch {
+          // Socket closed mid-negotiation; ICE candidates are queued
+        }
       }
 
       this.setState('connecting');
@@ -292,6 +315,35 @@ class PeerConnectionManager {
       sdpMid: iceCandidate.sdpMid ?? undefined,
       sdpMLineIndex: iceCandidate.sdpMLineIndex ?? undefined,
     });
+  }
+
+  async flushSignaledCandidates(): Promise<void> {
+    if (this.iceCandidateQueue.length === 0) return;
+
+    const client = getSignalingClient();
+    if (!client || !client.isConnected() || !this.conversationId) return;
+
+    const candidates = [...this.iceCandidateQueue];
+    this.iceCandidateQueue = [];
+
+    for (const candidate of candidates) {
+      try {
+        const sent = client.sendIceCandidate(
+          this.conversationId,
+          candidate.candidate ?? undefined,
+          candidate.sdpMid ?? undefined,
+          candidate.sdpMLineIndex ?? undefined,
+        );
+        if (!sent) {
+          // Put back at front if still can't send
+          this.iceCandidateQueue.unshift(candidate);
+          break;
+        }
+      } catch {
+        this.iceCandidateQueue.unshift(candidate);
+        break;
+      }
+    }
   }
 
   async close() {
