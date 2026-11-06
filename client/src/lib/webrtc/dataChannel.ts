@@ -50,7 +50,7 @@ class DataChannelManager {
       if (this.isClosing || !this.channel) {
         return;
       }
-      console.error('[dataChannel] error:', err);
+      console.log('[dataChannel] error:', err);
       this.state = 'failed';
       this.handlers.onError?.('DATA_CHANNEL_ERROR');
     };
