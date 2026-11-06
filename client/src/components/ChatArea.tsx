@@ -96,7 +96,7 @@ export default function ChatArea() {
 
       try {
         const response = await authFetch(
-          `/api/messages?selectedConversationId=${encodeURIComponent(selectedConversationId!)}`,
+          `/api/messages?conversationId=${encodeURIComponent(selectedConversationId!)}`,
           { cache: 'no-store' }
         );
         const data = await response.json();
