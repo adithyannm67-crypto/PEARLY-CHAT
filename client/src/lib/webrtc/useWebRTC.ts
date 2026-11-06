@@ -238,6 +238,7 @@ export function useWebRTC({
   }, [conversationId, userId]);
 
   const disconnect = useCallback(() => {
+    const leavingConversationId = currentConversationId.current;
     currentConversationId.current = null;
     peerJoinedRef.current = false;
     isOffererRef.current = false;
@@ -246,7 +247,9 @@ export function useWebRTC({
     setConnectionState('disconnected');
     setPeerConnectionState('new');
 
-    signalingClientRef.current?.leaveRoom(currentConversationId.current ?? '');
+    if (leavingConversationId) {
+      signalingClientRef.current?.leaveRoom(leavingConversationId);
+    }
     peerManagerRef.current?.close();
     dataChannelRef.current?.close();
   }, []);
