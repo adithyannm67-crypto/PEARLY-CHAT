@@ -45,13 +45,15 @@ class SignalingClient {
   private handlers: SignalingHandlers = {};
   private state: ConnectionState = 'disconnected';
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private maxReconnectAttempts = 10;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isConnecting = false;
   private shouldReconnect = true;
   private authenticated: boolean = false;
   private authenticatedResolve: (() => void) | null = null;
   private authenticatedPromise: Promise<void> | null = null;
+  private joinQueue: Array<{ conversationId: string; resolve: (value: boolean) => void }> = [];
+  private joinedRooms = new Set<string>();
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
@@ -100,17 +102,26 @@ class SignalingClient {
     }
   }
 
-  async connect(token?: string): Promise<void> {
+  private async ensureConnected(token?: string): Promise<boolean> {
+    if (this.isConnected() && this.authenticated) {
+      return true;
+    }
+
     if (this.isConnecting) {
-      return;
+      // Wait for existing connection to complete
+      await new Promise((resolve) => {
+        const check = () => {
+          if (!this.isConnecting) {
+            resolve(true);
+          } else {
+            setTimeout(check, 50);
+          }
+        };
+        check();
+      });
+      return this.isConnected() && this.authenticated;
     }
 
-    // If already connected, nothing to do
-    if (this.isConnected()) {
-      return;
-    }
-
-    // If we were in failed state, reset for reconnection attempt
     this.isConnecting = true;
     this.setState('connecting');
     this.authenticated = false;
@@ -119,9 +130,15 @@ class SignalingClient {
 
     const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
 
-    return new Promise((resolve, reject) => {
+    if (!effectiveToken) {
+      this.isConnecting = false;
+      this.setState('failed');
+      return false;
+    }
+
+    return new Promise((resolve) => {
       try {
-        const ws = new WebSocket(`${this.url}?token=${encodeURIComponent(effectiveToken ?? '')}`);
+        const ws = new WebSocket(`${this.url}?token=${encodeURIComponent(effectiveToken)}`);
         this.ws = ws;
 
         ws.onopen = () => {
@@ -129,7 +146,17 @@ class SignalingClient {
           this.reconnectAttempts = 0;
           this.setState('connected');
           this.handlers.onConnect?.();
-          resolve();
+          // Re-join all rooms after reconnect
+          for (const roomId of this.joinedRooms) {
+            this.send({ type: 'JOIN_ROOM', conversationId: roomId });
+          }
+          // Resolve any pending join requests
+          const pending = [...this.joinQueue];
+          this.joinQueue = [];
+          for (const { conversationId, resolve: res } of pending) {
+            res(this.send({ type: 'JOIN_ROOM', conversationId }));
+          }
+          resolve(true);
         };
 
         ws.onmessage = (event) => {
@@ -154,19 +181,20 @@ class SignalingClient {
 
         ws.onerror = (err) => {
           console.error('[signaling] WebSocket error:', err);
-          // Close the socket to trigger onclose and reconnect logic
           try {
             ws.close();
           } catch {
             // ignore close errors
           }
+          this.isConnecting = false;
           this.setState('failed');
           this.handlers.onError?.('CONNECTION_ERROR', 'WebSocket connection failed');
+          resolve(false);
         };
       } catch (err) {
         this.isConnecting = false;
         this.setState('failed');
-        reject(err);
+        resolve(false);
       }
     });
   }
@@ -187,7 +215,7 @@ class SignalingClient {
     const delay = Math.min(1000 * this.reconnectAttempts, 30000);
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
-      void this.connect();
+      void this.ensureConnected();
     }, delay);
   }
 
@@ -234,6 +262,10 @@ class SignalingClient {
   }
 
   async authenticate(token?: string): Promise<boolean> {
+    const connected = await this.ensureConnected(token);
+    if (!connected) {
+      return false;
+    }
     const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
     if (!effectiveToken) {
       return false;
@@ -244,11 +276,25 @@ class SignalingClient {
     return this.send({ type: 'AUTH', token: effectiveToken });
   }
 
+  public async connectPublic(token?: string): Promise<void> {
+    await this.ensureConnected(token);
+    await this.waitForAuthenticated();
+  }
+
   joinRoom(conversationId: string): boolean {
+    this.joinedRooms.add(conversationId);
+    if (!this.isConnected() || !this.authenticated) {
+      // Queue the join for after connection
+      return new Promise((resolve) => {
+        this.joinQueue.push({ conversationId, resolve });
+        void this.ensureConnected();
+      }) as unknown as boolean;
+    }
     return this.send({ type: 'JOIN_ROOM', conversationId });
   }
 
   leaveRoom(conversationId: string): boolean {
+    this.joinedRooms.delete(conversationId);
     return this.send({ type: 'LEAVE_ROOM', conversationId });
   }
 
@@ -286,6 +332,8 @@ class SignalingClient {
     this.authenticated = false;
     this.authenticatedPromise = null;
     this.authenticatedResolve = null;
+    this.joinedRooms.clear();
+    this.joinQueue = [];
     this.setState('disconnected');
   }
 }

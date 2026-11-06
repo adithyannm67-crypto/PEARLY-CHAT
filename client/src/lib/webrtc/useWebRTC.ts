@@ -67,6 +67,7 @@ export function useWebRTC({
   const negotiationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const isMountedRef = useRef(true);
 
   const addMessage = useCallback((message: DataChannelMessage) => {
     setMessages((prev) => {
@@ -116,6 +117,8 @@ export function useWebRTC({
   ]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     const client = getSignalingClient();
     const manager = getPeerConnectionManager(iceConfig);
     const channelMgr = getDataChannelManager();
@@ -144,7 +147,9 @@ export function useWebRTC({
           peerUserIdRef.current &&
           peerManagerRef.current
         ) {
-          console.log('[WebRTC] Re-joined room with peer, triggering negotiation retry');
+          console.log(
+            '[WebRTC] Re-joined room with peer, triggering negotiation retry',
+          );
           if (
             localUserId.current &&
             peerUserIdRef.current &&
@@ -152,9 +157,14 @@ export function useWebRTC({
             peerManagerRef.current
           ) {
             isOffererRef.current = true;
-            void peerManagerRef.current.createOffer(_conversationId).catch((err) => {
-              console.error('[WebRTC] Re-connect create offer error:', err);
-            });
+            void peerManagerRef.current
+              .createOffer(_conversationId)
+              .catch((err) => {
+                console.error(
+                  '[WebRTC] Re-connect create offer error:',
+                  err,
+                );
+              });
           }
         }
       },
@@ -222,7 +232,11 @@ export function useWebRTC({
       },
       onError: (code, message) => {
         console.error('[webrtc] signaling error:', code, message);
-        setConnectionState('failed');
+        if (code === 'CONNECTION_ERROR') {
+          setConnectionState('reconnecting');
+        } else {
+          setConnectionState('failed');
+        }
       },
       onConnect: async () => {
         setConnectionState('connecting');
@@ -231,7 +245,10 @@ export function useWebRTC({
         }
         // Re-join room if we were in a conversation
         if (currentConversationId.current) {
-          console.log('[WebRTC] Re-joining room after reconnect:', currentConversationId.current);
+          console.log(
+            '[WebRTC] Re-joining room after reconnect:',
+            currentConversationId.current,
+          );
           client.joinRoom(currentConversationId.current);
         }
       },
@@ -264,6 +281,7 @@ export function useWebRTC({
       onOpen: () => {
         setIsDataChannelOpen(true);
         setConnectionState('connected');
+        clearNegotiationTimeout();
       },
       onClose: () => {
         setIsDataChannelOpen(false);
@@ -280,10 +298,15 @@ export function useWebRTC({
     });
 
     return () => {
+      isMountedRef.current = false;
       clearNegotiationTimeout();
-      client.disconnect();
-      manager.close();
-      channelMgr.close();
+      // Don't close the shared WS on cleanup - just leave the room
+      // The WS singleton persists across Strict Mode remounts
+      if (currentConversationId.current) {
+        client.leaveRoom(currentConversationId.current);
+      }
+      peerManagerRef.current?.close();
+      dataChannelRef.current?.close();
       signalingClientRef.current = null;
       peerManagerRef.current = null;
       dataChannelRef.current = null;
@@ -310,7 +333,13 @@ export function useWebRTC({
         return;
       }
 
-      await client.connect(token);
+      currentConversationId.current = conversationId;
+      peerJoinedRef.current = false;
+      isOffererRef.current = false;
+      setMessages([]);
+      setIsDataChannelOpen(false);
+      setConnectionState('connecting');
+
       await client.authenticate(token);
       await client.waitForAuthenticated();
       client.joinRoom(conversationId);
@@ -325,10 +354,12 @@ export function useWebRTC({
     currentConversationId.current = null;
     peerJoinedRef.current = false;
     isOffererRef.current = false;
+    peerUserIdRef.current = null;
     setMessages([]);
     setIsDataChannelOpen(false);
     setConnectionState('disconnected');
     setPeerConnectionState('new');
+    clearNegotiationTimeout();
 
     if (leavingConversationId) {
       signalingClientRef.current?.leaveRoom(leavingConversationId);
