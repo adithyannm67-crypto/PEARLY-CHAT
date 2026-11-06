@@ -59,6 +59,7 @@ export function useWebRTC({
   );
   const currentConversationId = useRef<string | null>(null);
   const localUserId = useRef<string | null>(userId);
+  const peerUserIdRef = useRef<string | null>(null);
   const isOffererRef = useRef(false);
   const peerJoinedRef = useRef(false);
 
@@ -80,33 +81,70 @@ export function useWebRTC({
     dataChannelRef.current = channelMgr;
 
     client.setHandlers({
-      onAuthenticated: () => {
-        if (currentConversationId.current) {
-          client.joinRoom(currentConversationId.current);
-        }
+      onAuthenticated: (userId) => {
+        console.log(
+          '[WS] authenticated',
+          { userId },
+        );
+        // Room joining is handled explicitly in connect(), not here.
+        // This prevents duplicate JOIN_ROOM messages.
       },
-      onRoomJoined: (_conversationId, participantCount) => {
+      onRoomJoined: (_conversationId, participantCount, participantIds) => {
+        console.log(
+          '[WS] room joined',
+          {
+            conversationId: _conversationId,
+            participantCount,
+            participantIds,
+            localUserId: localUserId.current,
+          },
+        );
+
+        // Determine the other participant (the peer we negotiate with)
+        const otherUserId = participantIds.find(
+          (id) => id !== localUserId.current,
+        );
+
+        if (otherUserId) {
+          peerUserIdRef.current = otherUserId;
+          void manager.init(
+            localUserId.current!,
+            otherUserId,
+            _conversationId,
+          );
+        } else {
+          console.log(
+            '[WS] room joined but no other participant found',
+            { conversationId: _conversationId, participantIds },
+          );
+        }
+
         setConnectionState(
           participantCount >= 2 ? 'negotiating' : 'waiting-for-peer',
         );
-        if (participantCount >= 2 && !peerJoinedRef.current) {
-          peerJoinedRef.current = true;
-        }
       },
       onPeerJoined: (_conversationId, peerUserId) => {
+        console.log(
+          '[WS] peer joined',
+          { conversationId: _conversationId, peerUserId, localUserId: localUserId.current },
+        );
+
         peerJoinedRef.current = true;
-        setConnectionState('negotiating');
-        if (
-          localUserId.current &&
-          peerUserId &&
-          localUserId.current < peerUserId &&
-          manager
-        ) {
-          isOffererRef.current = true;
-          void manager.createOffer(_conversationId);
+        peerUserIdRef.current = peerUserId;
+
+        if (localUserId.current && peerUserId) {
+          void manager.init(localUserId.current, peerUserId, _conversationId);
         }
+
+        setConnectionState('negotiating');
+
+        // Do NOT create the offer manually here.
+        // Negotiation is driven by onnegotiationneeded in the peer connection manager.
+        // Both peers independently decide polite/impolite roles via manager.init().
       },
       onPeerLeft: () => {
+        console.log('[WS] peer left');
+
         peerJoinedRef.current = false;
         isOffererRef.current = false;
         setConnectionState('disconnected');
@@ -114,12 +152,20 @@ export function useWebRTC({
         channelMgr?.close();
       },
       onOffer: async (_senderId, _conversationId, sdp) => {
+        console.log(
+          '[WS] offer received',
+          { conversationId: _conversationId, senderId: _senderId, sdpLength: sdp?.length },
+        );
         if (!manager) return;
-        await manager.setOffer(_conversationId, sdp);
+        await manager.handleOffer(_conversationId, sdp);
       },
       onAnswer: async (_senderId, _conversationId, sdp) => {
+        console.log(
+          '[WS] answer received',
+          { conversationId: _conversationId, senderId: _senderId, sdpLength: sdp?.length },
+        );
         if (!manager) return;
-        await manager.setAnswer(_conversationId, sdp);
+        await manager.handleAnswer(_conversationId, sdp);
       },
       onIceCandidate: async (
         _senderId,
@@ -208,6 +254,7 @@ export function useWebRTC({
     // Reset for new conversation
     currentConversationId.current = conversationId;
     peerJoinedRef.current = false;
+    peerUserIdRef.current = null;
     isOffererRef.current = false;
     setMessages([]);
     setIsDataChannelOpen(false);
@@ -227,7 +274,11 @@ export function useWebRTC({
 
       await client.connect(token);
       await client.authenticate(token);
+
+      // Join the room exactly once after authentication succeeds.
       client.joinRoom(conversationId);
+
+      await peerManagerRef.current?.flushIceCandidates();
     } catch (err) {
       console.error('[webrtc] connect error:', err);
       setConnectionState('failed');
@@ -235,15 +286,21 @@ export function useWebRTC({
   }, [conversationId, userId]);
 
   const disconnect = useCallback(() => {
+    // FIX: Save conversation ID BEFORE nulling it, so leaveRoom uses the correct ID.
+    const convId = currentConversationId.current;
+
     currentConversationId.current = null;
     peerJoinedRef.current = false;
+    peerUserIdRef.current = null;
     isOffererRef.current = false;
     setMessages([]);
     setIsDataChannelOpen(false);
     setConnectionState('disconnected');
     setPeerConnectionState('new');
 
-    signalingClientRef.current?.leaveRoom(currentConversationId.current ?? '');
+    if (convId) {
+      signalingClientRef.current?.leaveRoom(convId);
+    }
     peerManagerRef.current?.close();
     dataChannelRef.current?.close();
   }, []);

@@ -3,7 +3,7 @@ import { SERVER_URL } from '@/lib/serverProxy';
 
 type SignalingEvent =
   | { type: 'AUTHENTICATED'; userId: string }
-  | { type: 'ROOM_JOINED'; conversationId: string; participantCount: number }
+  | { type: 'ROOM_JOINED'; conversationId: string; participantCount: number; participantIds: string[] }
   | { type: 'PEER_JOINED'; conversationId: string; userId: string }
   | { type: 'PEER_LEFT'; conversationId: string; userId: string }
   | { type: 'OFFER'; senderId: string; conversationId: string; sdp: string }
@@ -18,9 +18,24 @@ type SignalingEvent =
     }
   | { type: 'ERROR'; code: string; message: string };
 
+function getBrowserName(): string {
+  const ua = navigator.userAgent;
+  if (ua.includes('Firefox')) return 'Firefox';
+  if (ua.includes('Edg/')) return 'Edge';
+  if (ua.includes('Chrome')) return 'Chrome';
+  if (ua.includes('Safari')) return 'Safari';
+  return 'Unknown';
+}
+
+function log(prefix: string, convId: string | null, message: string, data?: unknown) {
+  const conv = convId ?? '-';
+  const payload = data !== undefined ? ` ${JSON.stringify(data)}` : '';
+  console.log(`[${prefix}] ${getBrowserName()} conv=${conv} ${new Date().toISOString()} ${message}${payload}`);
+}
+
 type SignalingHandlers = {
   onAuthenticated?: (userId: string) => void;
-  onRoomJoined?: (conversationId: string, participantCount: number) => void;
+  onRoomJoined?: (conversationId: string, participantCount: number, participantIds: string[]) => void;
   onPeerJoined?: (conversationId: string, userId: string) => void;
   onPeerLeft?: (conversationId: string, userId: string) => void;
   onOffer?: (senderId: string, conversationId: string, sdp: string) => void;
@@ -106,6 +121,18 @@ class SignalingClient {
         ws.onmessage = (event) => {
           try {
             const message = JSON.parse(event.data) as SignalingEvent;
+            if (message.type === 'OFFER') {
+              log('[EDGE-OFFER]', message.conversationId, `OFFER received via WebSocket sender=${message.senderId}`, { sdpLength: message.sdp?.length });
+            } else if (message.type === 'ANSWER') {
+              log('[ANSWER]', message.conversationId, `ANSWER received via WebSocket sender=${message.senderId}`, { sdpLength: message.sdp?.length });
+            } else if (message.type === 'ICE_CANDIDATE') {
+              log('[ICE-RECEIVE]', message.conversationId, `ICE candidate received via WebSocket sender=${message.senderId}`, {
+                candidate: typeof message.candidate === 'string' ? message.candidate.slice(0, 80) : message.candidate,
+                type: typeof message.candidate === 'string' ? message.candidate.split(' ')[0] : 'unknown',
+                sdpMid: message.sdpMid,
+                sdpMLineIndex: message.sdpMLineIndex,
+              });
+            }
             this.handleMessage(message);
           } catch {
             // ignore malformed messages
@@ -162,7 +189,11 @@ class SignalingClient {
         this.handlers.onAuthenticated?.(message.userId);
         break;
       case 'ROOM_JOINED':
-        this.handlers.onRoomJoined?.(message.conversationId, message.participantCount);
+        this.handlers.onRoomJoined?.(
+          message.conversationId,
+          message.participantCount,
+          message.participantIds,
+        );
         break;
       case 'PEER_JOINED':
         this.handlers.onPeerJoined?.(message.conversationId, message.userId);
@@ -171,12 +202,19 @@ class SignalingClient {
         this.handlers.onPeerLeft?.(message.conversationId, message.userId);
         break;
       case 'OFFER':
+        log('[EDGE-OFFER]', message.conversationId, 'OFFER handler executing', { senderId: message.senderId });
         this.handlers.onOffer?.(message.senderId, message.conversationId, message.sdp);
         break;
       case 'ANSWER':
+        log('[ANSWER]', message.conversationId, 'ANSWER handler executing', { senderId: message.senderId });
         this.handlers.onAnswer?.(message.senderId, message.conversationId, message.sdp);
         break;
       case 'ICE_CANDIDATE':
+        log('[ICE-RECEIVE]', message.conversationId, 'ICE candidate handler executing', {
+          senderId: message.senderId,
+          sdpMid: message.sdpMid,
+          sdpMLineIndex: message.sdpMLineIndex,
+        });
         this.handlers.onIceCandidate?.(
           message.senderId,
           message.conversationId,
@@ -208,10 +246,12 @@ class SignalingClient {
   }
 
   sendOffer(conversationId: string, sdp: string): boolean {
+    log('[OFFER-SEND]', conversationId, 'signalingClient.sendOffer executing WebSocket send', { sdpLength: sdp?.length });
     return this.send({ type: 'OFFER', sdp, conversationId });
   }
 
   sendAnswer(conversationId: string, sdp: string): boolean {
+    log('[ANSWER]', conversationId, 'signalingClient.sendAnswer executing WebSocket send', { sdpLength: sdp?.length });
     return this.send({ type: 'ANSWER', sdp, conversationId });
   }
 
@@ -221,6 +261,13 @@ class SignalingClient {
     sdpMid?: string,
     sdpMLineIndex?: number,
   ): boolean {
+    const candidateType = typeof candidate === 'string' ? candidate.split(' ')[0] : 'unknown';
+    log('[ICE-SEND]', conversationId, 'signalingClient.sendIceCandidate executing WebSocket send', {
+      candidate: typeof candidate === 'string' ? candidate.slice(0, 80) : candidate,
+      type: candidateType,
+      sdpMid,
+      sdpMLineIndex,
+    });
     return this.send({ type: 'ICE_CANDIDATE', candidate, conversationId, sdpMid, sdpMLineIndex });
   }
 

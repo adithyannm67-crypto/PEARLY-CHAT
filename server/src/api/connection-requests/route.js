@@ -36,7 +36,7 @@ export default async function handler(req) {
       status.toUpperCase()
     );
 
-    console.log("Connection requests:", requests);
+    // console.log("Connection requests:", requests);
 
     return { requests };
   }
@@ -45,10 +45,10 @@ export default async function handler(req) {
     const body = await parseBody(req);
     const { receiverId } = body;
 
-    console.log("[Connection Request] API POST:", {
-      senderId: user.id,
-      receiverId,
-    });
+    // console.log("[Connection Request] API POST:", {
+    //   senderId: user.id,
+    //   receiverId,
+    // });
 
     if (!isUuid(receiverId)) {
       throw new HttpError(400, "A valid receiverId is required");

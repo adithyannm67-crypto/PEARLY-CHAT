@@ -8,6 +8,33 @@ const MAX_PARTICIPANTS = 2;
 // conversationId -> { sockets: Set<WebSocket>, participants: Map<userId, Set<WebSocket>> }
 const rooms = new Map();
 
+// conversationId + type + senderId + payload hash -> timestamp
+const signalingCache = new Map();
+const SIGNALING_CACHE_TTL = 30 * 1000;
+
+function signalingKey(conversationId, type, senderId, payload) {
+  let hash = "";
+  if (type === "ICE_CANDIDATE") hash = payload.candidate || "";
+  else if (type === "OFFER" || type === "ANSWER") hash = payload.sdp || "";
+  return `${conversationId}|${type}|${senderId}|${hash}`;
+}
+
+function isDuplicateSignal(conversationId, type, senderId, payload) {
+  const key = signalingKey(conversationId, type, senderId, payload);
+  const now = Date.now();
+  const seen = signalingCache.get(key);
+  if (seen && now - seen < SIGNALING_CACHE_TTL) return true;
+  signalingCache.set(key, now);
+  return false;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, ts] of signalingCache.entries()) {
+    if (now - ts > SIGNALING_CACHE_TTL) signalingCache.delete(key);
+  }
+}, SIGNALING_CACHE_TTL);
+
 function getRoom(conversationId) {
   let room = rooms.get(conversationId);
   if (!room) {
@@ -108,6 +135,11 @@ function handleClose(socket) {
 }
 
 async function handleAuth(socket, payload) {
+  if (socket.authenticated) {
+    send(socket, { type: "AUTHENTICATED", userId: socket.userId });
+    return;
+  }
+
   const token = payload.token;
   if (!token || typeof token !== "string") {
     return sendError(socket, "INVALID_TOKEN", "Token is required");
@@ -127,6 +159,7 @@ async function handleAuth(socket, payload) {
 }
 
 async function handleJoinRoom(socket, payload) {
+  // console.log("[ws] join room:", payload);
   const { conversationId } = payload;
 
   if (!conversationId || typeof conversationId !== "string") {
@@ -140,6 +173,7 @@ async function handleJoinRoom(socket, payload) {
       socket.userId,
       socket.accessToken
     );
+    // console.log("[ws] isParticipant:", isParticipant);
   } catch (err) {
     return sendError(socket, "MEMBERSHIP_ERROR", "Failed to verify membership");
   }
@@ -149,11 +183,14 @@ async function handleJoinRoom(socket, payload) {
   }
 
   const room = getRoom(conversationId);
+  // console.log("[ws] room:", room);
 
   const participantIds = new Set(room.participants.keys());
   if (!participantIds.has(socket.userId) && participantIds.size >= MAX_PARTICIPANTS) {
     return sendError(socket, "ROOM_FULL", "Conversation already has two participants");
   }
+
+  const alreadyJoined = socket.rooms.has(conversationId);
 
   room.sockets.add(socket);
   if (!room.participants.has(socket.userId)) {
@@ -162,19 +199,26 @@ async function handleJoinRoom(socket, payload) {
   room.participants.get(socket.userId).add(socket);
   socket.rooms.add(conversationId);
 
+  const otherParticipantIds = [...room.participants.keys()].filter(
+    (id) => id !== socket.userId,
+  );
+
   send(socket, {
     type: "ROOM_JOINED",
     conversationId,
     participantCount: room.participants.size,
+    participantIds: otherParticipantIds,
   });
 
-  const others = [...room.sockets].filter((s) => s.userId !== socket.userId);
-  for (const other of others) {
-    send(other, {
-      type: "PEER_JOINED",
-      conversationId,
-      userId: socket.userId,
-    });
+  if (!alreadyJoined) {
+    const others = [...room.sockets].filter((s) => s.userId !== socket.userId);
+    for (const other of others) {
+      send(other, {
+        type: "PEER_JOINED",
+        conversationId,
+        userId: socket.userId,
+      });
+    }
   }
 }
 
@@ -218,6 +262,10 @@ async function handleSignaling(socket, payload, type) {
     }
   }
 
+  if (isDuplicateSignal(conversationId, type, socket.userId, payload)) {
+    return;
+  }
+
   const forwardPayload = {
     type,
     senderId: socket.userId,
@@ -234,7 +282,25 @@ async function handleSignaling(socket, payload, type) {
     if (payload.sdpMLineIndex !== undefined) forwardPayload.sdpMLineIndex = payload.sdpMLineIndex;
   }
 
+  const recipients = [...room.sockets].filter((s) => s.userId !== socket.userId);
+
+  if (type === "OFFER") {
+    console.log(`[SERVER-OFFER] OFFER received ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId}`);
+  }
+  if (type === "ICE_CANDIDATE") {
+    const candType = typeof payload.candidate === "string" ? payload.candidate.split(" ")[0] : "unknown";
+    console.log(`[SERVER-OFFER] ICE_CANDIDATE received ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId} candidateType=${candType}`);
+  }
+
   broadcast(room, socket, forwardPayload);
+
+  if (type === "OFFER") {
+    console.log(`[SERVER-OFFER] OFFER forwarded ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId} recipients=${recipients.map((s) => s.userId)}`);
+  }
+  if (type === "ICE_CANDIDATE") {
+    const candType = typeof payload.candidate === "string" ? payload.candidate.split(" ")[0] : "unknown";
+    console.log(`[SERVER-OFFER] ICE_CANDIDATE forwarded ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId} candidateType=${candType} recipients=${recipients.map((s) => s.userId)}`);
+  }
 }
 
 async function handleMessage(socket, raw) {
@@ -258,7 +324,7 @@ async function handleMessage(socket, raw) {
     }
 
     const { type } = payload;
-
+console.log("[signaling] message:", type);
     if (type === "AUTH") {
       await handleAuth(socket, payload);
       return;
@@ -303,9 +369,9 @@ export function setupSignaling(wss) {
     (async () => {
       try {
         const token = extractToken(request);
-        if (token) {
+        if (token && !socket.authenticated) {
           const user = await authenticateUser(token);
-          if (user) {
+          if (user && !socket.authenticated) {
             socket.userId = user.id;
             socket.accessToken = token;
             socket.authenticated = true;
@@ -317,9 +383,15 @@ export function setupSignaling(wss) {
       }
     })();
 
+    socket._chain = Promise.resolve();
     socket.on("message", (message) => {
       console.log("[ws] raw message:", typeof message, message.toString().slice(0, 120));
-      handleMessage(socket, message);
+      socket._chain = socket._chain.then(() => handleMessage(socket, message)).catch((err) => {
+        console.error("[signaling] message error:", err);
+        try {
+          sendError(socket, "INTERNAL_ERROR", "Internal server error");
+        } catch {}
+      });
     });
 
     socket.on("close", () => {
