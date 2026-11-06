@@ -99,26 +99,38 @@ export function usePresence(userId: string | null): UsePresenceReturn {
     // Subscribe and track self in the presence channel.
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        await channel.track({
-          user_id: userId,
-          online: true,
-          last_seen: new Date().toISOString(),
-        });
+        try {
+          await channel.track({
+            user_id: userId,
+            online: true,
+            last_seen: new Date().toISOString(),
+          });
+        } catch {
+          // Ignore track errors on subscribe.
+        }
       }
     });
 
     // Lightweight presence heartbeat via Realtime channel (no REST/DB write).
     const heartbeat = setInterval(() => {
-      void channel.track({
-        user_id: userId,
-        online: true,
-        last_seen: new Date().toISOString(),
-      });
+      try {
+        void channel.track({
+          user_id: userId,
+          online: true,
+          last_seen: new Date().toISOString(),
+        });
+      } catch {
+        // Ignore track errors during heartbeat (channel may be closing).
+      }
     }, 30000);
 
     // Mark offline on page close.
     const handleBeforeUnload = () => {
-      void channel.untrack();
+      try {
+        void channel.untrack();
+      } catch {
+        // Ignore untrack errors on unload.
+      }
       void setOwnStatus(false);
     };
 
@@ -126,9 +138,17 @@ export function usePresence(userId: string | null): UsePresenceReturn {
 
     return () => {
       clearInterval(heartbeat);
-      void channel.untrack();
+      try {
+        void channel.untrack();
+      } catch {
+        // Ignore untrack errors during cleanup.
+      }
       void setOwnStatus(false);
-      supabase.removeChannel(channel);
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        // Ignore removeChannel errors during cleanup.
+      }
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [userId, setOwnStatus]);
