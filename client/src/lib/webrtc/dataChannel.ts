@@ -99,6 +99,32 @@ class DataChannelManager {
     }
   }
 
+  waitForOpen(timeoutMs = 15000): Promise<void> {
+    if (this.isOpen()) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('DataChannel open timeout'));
+      }, timeoutMs);
+
+      const check = () => {
+        if (this.isOpen()) {
+          clearTimeout(timer);
+          resolve();
+        } else if (this.state === 'failed' || this.state === 'closed') {
+          clearTimeout(timer);
+          reject(new Error(`DataChannel not open (state: ${this.state})`));
+        } else {
+          setTimeout(check, 100);
+        }
+      };
+
+      check();
+    });
+  }
+
   close() {
     if (this.channel) {
       this.channel.close();
