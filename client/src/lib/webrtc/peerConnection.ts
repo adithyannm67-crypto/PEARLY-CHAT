@@ -42,7 +42,6 @@ class PeerConnectionManager {
   private config: RTCConfiguration;
   private conversationId: string | null = null;
   private negotiating = false;
-  private offered = false;
 
   constructor(config: PeerConnectionConfig = {}, handlers: PeerConnectionHandlers = {}) {
     this.handlers = handlers;
@@ -140,13 +139,23 @@ class PeerConnectionManager {
   }
 
   async createOffer(conversationId: string): Promise<string> {
-    if (this.negotiating || this.offered) {
-      throw new Error('Already negotiating or offer already sent');
+    if (this.negotiating) {
+      throw new Error('Already negotiating');
     }
 
     this.negotiating = true;
     this.conversationId = conversationId;
     this.isOfferer = true;
+
+    // Close any existing peer connection before creating a new one
+    if (this.pc) {
+      this.pc.close();
+      this.pc = null;
+    }
+    if (this.dataChannel) {
+      this.dataChannel.close();
+      this.dataChannel = null;
+    }
 
     const pc = this.createPeerConnection();
     this.pc = pc;
@@ -165,8 +174,6 @@ class PeerConnectionManager {
       if (!offerSdp) {
         throw new Error('Failed to create offer SDP');
       }
-
-      this.offered = true;
 
       const client = getSignalingClient();
       if (client && client.isConnected()) {
@@ -289,7 +296,6 @@ class PeerConnectionManager {
 
   async close() {
     this.negotiating = false;
-    this.offered = false;
 
     if (this.dataChannel) {
       this.dataChannel.close();
