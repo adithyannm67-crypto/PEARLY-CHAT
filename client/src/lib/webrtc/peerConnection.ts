@@ -76,9 +76,9 @@ class PeerConnectionManager {
           this.setState('new');
           break;
         case 'checking':
-        case 'connected':
-          this.setState('connected');
+          this.setState('connecting');
           break;
+        case 'connected':
         case 'completed':
           this.setState('connected');
           break;
@@ -88,6 +88,14 @@ class PeerConnectionManager {
         case 'failed':
           this.setState('failed');
           this.handlers.onError?.('ICE_CONNECTION_FAILED');
+          // Attempt ICE restart to gather new candidates (e.g. with TURN)
+          setTimeout(async () => {
+            try {
+              await this.pc?.restartIce();
+            } catch {
+              // Restart may fail if PC is closed
+            }
+          }, 2000);
           break;
         case 'closed':
           this.setState('closed');
@@ -99,9 +107,6 @@ class PeerConnectionManager {
 
     pc.onsignalingstatechange = () => {
       switch (pc.signalingState) {
-        case 'stable':
-          this.setState('connected');
-          break;
         case 'closed':
           this.setState('closed');
           break;
