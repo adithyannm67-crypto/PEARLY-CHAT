@@ -41,6 +41,8 @@ class PeerConnectionManager {
   private state: PeerConnectionState = 'new';
   private config: RTCConfiguration;
   private conversationId: string | null = null;
+  private negotiating = false;
+  private offered = false;
 
   constructor(config: PeerConnectionConfig = {}, handlers: PeerConnectionHandlers = {}) {
     this.handlers = handlers;
@@ -96,7 +98,7 @@ class PeerConnectionManager {
     pc.onsignalingstatechange = () => {
       switch (pc.signalingState) {
         case 'stable':
-          this.setState(this.isOfferer ? 'connected' : 'connected');
+          this.setState('connected');
           break;
         case 'closed':
           this.setState('closed');
@@ -138,90 +140,127 @@ class PeerConnectionManager {
   }
 
   async createOffer(conversationId: string): Promise<string> {
+    if (this.negotiating || this.offered) {
+      throw new Error('Already negotiating or offer already sent');
+    }
+
+    this.negotiating = true;
     this.conversationId = conversationId;
     this.isOfferer = true;
-    this.pc = this.createPeerConnection();
 
-    this.dataChannel = this.pc.createDataChannel('chat', {
+    const pc = this.createPeerConnection();
+    this.pc = pc;
+
+    this.dataChannel = pc.createDataChannel('chat', {
       negotiated: false,
       ordered: true,
     });
     this.handlers.onDataChannel?.(this.dataChannel);
 
-    const offer = await this.pc.createOffer();
-    await this.pc.setLocalDescription(offer);
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
 
-    const offerSdp = this.pc.localDescription?.sdp;
-    if (!offerSdp) {
-      throw new Error('Failed to create offer SDP');
+      const offerSdp = pc.localDescription?.sdp;
+      if (!offerSdp) {
+        throw new Error('Failed to create offer SDP');
+      }
+
+      this.offered = true;
+
+      const client = getSignalingClient();
+      if (client && client.isConnected()) {
+        client.sendOffer(conversationId, offerSdp);
+      }
+
+      this.setState('connecting');
+      return offerSdp;
+    } finally {
+      this.negotiating = false;
     }
-
-    const client = getSignalingClient();
-    if (client && client.isConnected()) {
-      client.sendOffer(conversationId, offerSdp);
-    }
-
-    this.setState('connecting');
-    return offerSdp;
   }
 
   async setOffer(conversationId: string, sdp: string): Promise<void> {
+    if (this.negotiating) {
+      throw new Error('Already negotiating');
+    }
+
+    this.negotiating = true;
     this.conversationId = conversationId;
     this.isOfferer = false;
-    this.pc = this.createPeerConnection();
 
-    await this.pc.setRemoteDescription({ type: 'offer', sdp });
-    this.remoteDescriptionSet = true;
+    const pc = this.createPeerConnection();
+    this.pc = pc;
 
-    // Flush queued ICE candidates
-    while (this.iceCandidateQueue.length > 0) {
-      const candidate = this.iceCandidateQueue.shift();
-      if (candidate) {
-        await this.pc.addIceCandidate({
-          candidate: candidate.candidate ?? undefined,
-          sdpMid: candidate.sdpMid ?? undefined,
-          sdpMLineIndex: candidate.sdpMLineIndex ?? undefined,
-        });
+    try {
+      await pc.setRemoteDescription({ type: 'offer', sdp });
+      this.remoteDescriptionSet = true;
+
+      // Flush queued ICE candidates
+      while (this.iceCandidateQueue.length > 0) {
+        const candidate = this.iceCandidateQueue.shift();
+        if (candidate) {
+          await pc.addIceCandidate({
+            candidate: candidate.candidate ?? undefined,
+            sdpMid: candidate.sdpMid ?? undefined,
+            sdpMLineIndex: candidate.sdpMLineIndex ?? undefined,
+          });
+        }
       }
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      const answerSdp = pc.localDescription?.sdp;
+      if (!answerSdp) {
+        throw new Error('Failed to create answer SDP');
+      }
+
+      const client = getSignalingClient();
+      if (client && client.isConnected()) {
+        client.sendAnswer(conversationId, answerSdp);
+      }
+
+      this.setState('connecting');
+    } finally {
+      this.negotiating = false;
     }
-
-    const answer = await this.pc.createAnswer();
-    await this.pc.setLocalDescription(answer);
-
-    const answerSdp = this.pc.localDescription?.sdp;
-    if (!answerSdp) {
-      throw new Error('Failed to create answer SDP');
-    }
-
-    const client = getSignalingClient();
-    if (client && client.isConnected()) {
-      client.sendAnswer(conversationId, answerSdp);
-    }
-
-    this.setState('connecting');
   }
 
   async setAnswer(conversationId: string, sdp: string): Promise<void> {
+    if (this.negotiating) {
+      throw new Error('Already negotiating');
+    }
+
     if (!this.pc) {
       throw new Error('No peer connection to set answer on');
     }
 
-    await this.pc.setRemoteDescription({ type: 'answer', sdp });
-    this.remoteDescriptionSet = true;
+    this.negotiating = true;
+    this.conversationId = conversationId;
 
-    // Flush queued ICE candidates
-    while (this.iceCandidateQueue.length > 0) {
-      const candidate = this.iceCandidateQueue.shift();
-      if (candidate) {
-        await this.pc.addIceCandidate({
-          candidate: candidate.candidate ?? undefined,
-          sdpMid: candidate.sdpMid ?? undefined,
-          sdpMLineIndex: candidate.sdpMLineIndex ?? undefined,
-        });
+    const pc = this.pc;
+
+    try {
+      await pc.setRemoteDescription({ type: 'answer', sdp });
+      this.remoteDescriptionSet = true;
+
+      // Flush queued ICE candidates
+      while (this.iceCandidateQueue.length > 0) {
+        const candidate = this.iceCandidateQueue.shift();
+        if (candidate) {
+          await pc.addIceCandidate({
+            candidate: candidate.candidate ?? undefined,
+            sdpMid: candidate.sdpMid ?? undefined,
+            sdpMLineIndex: candidate.sdpMLineIndex ?? undefined,
+          });
+        }
       }
-    }
 
-    this.setState('connecting');
+      this.setState('connecting');
+    } finally {
+      this.negotiating = false;
+    }
   }
 
   async addIceCandidate(
@@ -249,6 +288,9 @@ class PeerConnectionManager {
   }
 
   async close() {
+    this.negotiating = false;
+    this.offered = false;
+
     if (this.dataChannel) {
       this.dataChannel.close();
       this.dataChannel = null;

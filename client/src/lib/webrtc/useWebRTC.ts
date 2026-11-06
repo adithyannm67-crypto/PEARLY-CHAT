@@ -100,26 +100,28 @@ export function useWebRTC({
           localUserId.current &&
           peerUserId &&
           localUserId.current < peerUserId &&
-          manager
+          peerManagerRef.current
         ) {
           isOffererRef.current = true;
-          void manager.createOffer(_conversationId);
+          void peerManagerRef.current.createOffer(_conversationId).catch((err) => {
+            console.error('[webrtc] create offer error:', err);
+          });
         }
       },
       onPeerLeft: () => {
         peerJoinedRef.current = false;
         isOffererRef.current = false;
         setConnectionState('disconnected');
-        manager?.close();
-        channelMgr?.close();
+        peerManagerRef.current?.close();
+        dataChannelRef.current?.close();
       },
       onOffer: async (_senderId, _conversationId, sdp) => {
-        if (!manager) return;
-        await manager.setOffer(_conversationId, sdp);
+        if (!peerManagerRef.current) return;
+        await peerManagerRef.current.setOffer(_conversationId, sdp);
       },
       onAnswer: async (_senderId, _conversationId, sdp) => {
-        if (!manager) return;
-        await manager.setAnswer(_conversationId, sdp);
+        if (!peerManagerRef.current) return;
+        await peerManagerRef.current.setAnswer(_conversationId, sdp);
       },
       onIceCandidate: async (
         _senderId,
@@ -128,8 +130,8 @@ export function useWebRTC({
         sdpMid,
         sdpMLineIndex,
       ) => {
-        if (!manager) return;
-        await manager.addIceCandidate(
+        if (!peerManagerRef.current) return;
+        await peerManagerRef.current.addIceCandidate(
           _conversationId,
           candidate,
           sdpMid,
@@ -160,7 +162,7 @@ export function useWebRTC({
         }
       },
       onDataChannel: (channel) => {
-        channelMgr?.attach(channel);
+        dataChannelRef.current?.attach(channel);
       },
       onError: (error) => {
         console.error('[webrtc] peer connection error:', error);
