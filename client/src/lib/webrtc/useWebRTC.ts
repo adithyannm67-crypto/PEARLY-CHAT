@@ -228,8 +228,9 @@ export function useWebRTC({
         addMessage(message);
       },
       onError: (error) => {
+        // Log but don't tear down the connection — data channel errors
+        // can be transient or occur during intentional disconnect.
         console.error('[webrtc] data channel error:', error);
-        setConnectionState('failed');
       },
     });
 

@@ -19,6 +19,7 @@ class DataChannelManager {
   private channel: RTCDataChannel | null = null;
   private handlers: DataChannelHandlers = {};
   private state: DataChannelState = 'closed';
+  private isClosing = false;
 
   getState(): DataChannelState {
     return this.state;
@@ -31,6 +32,7 @@ class DataChannelManager {
   attach(channel: RTCDataChannel) {
     this.channel = channel;
     this.state = 'connecting';
+    this.isClosing = false;
 
     channel.onopen = () => {
       this.state = 'open';
@@ -38,12 +40,16 @@ class DataChannelManager {
     };
 
     channel.onclose = () => {
+      this.isClosing = false;
       this.state = 'closed';
       this.channel = null;
       this.handlers.onClose?.();
     };
 
     channel.onerror = (err) => {
+      if (this.isClosing || !this.channel) {
+        return;
+      }
       console.error('[dataChannel] error:', err);
       this.state = 'failed';
       this.handlers.onError?.('DATA_CHANNEL_ERROR');
@@ -100,6 +106,7 @@ class DataChannelManager {
   }
 
   close() {
+    this.isClosing = true;
     if (this.channel) {
       this.channel.close();
       this.channel = null;
