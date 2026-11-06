@@ -169,10 +169,10 @@ class PeerConnectionManager {
         this.dataChannel = null;
       }
 
-      const pc = this.createPeerConnection();
-      this.pc = pc;
+    const pc = this.createPeerConnection();
+    this.pc = pc;
 
-      this.dataChannel = pc.createDataChannel('chat', {
+    this.dataChannel = pc.createDataChannel('chat', {
         negotiated: false,
         ordered: true,
       });
@@ -207,6 +207,12 @@ class PeerConnectionManager {
 
       const pc = this.createPeerConnection();
       this.pc = pc;
+
+      // Ignore duplicate offer if already stable
+      if (pc.signalingState === 'stable') {
+        this.setState('connecting');
+        return;
+      }
 
       await pc.setRemoteDescription({ type: 'offer', sdp });
       this.remoteDescriptionSet = true;
@@ -253,6 +259,12 @@ class PeerConnectionManager {
       }
 
       const pc = this.pc;
+
+      // Ignore duplicate answer if already stable
+      if (pc.signalingState === 'stable') {
+        this.setState('connecting');
+        return;
+      }
 
       await pc.setRemoteDescription({ type: 'answer', sdp });
       this.remoteDescriptionSet = true;
