@@ -1,6 +1,7 @@
 import http from "http";
 import dotenv from "dotenv";
 import { WebSocketServer } from "ws";
+import { setupSignaling } from "./ws/signaling.js";
 import signinHandler from "./api/auth/signin/route.js";
 import signupHandler from "./api/auth/signup/route.js";
 import logoutHandler from "./api/auth/logout/route.js";
@@ -72,23 +73,7 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server });
 
-wss.on("connection", (socket) => {
-  if (!isProduction) {
-    console.log("A client connected");
-  }
-
-  socket.on("message", (message) => {
-    if (!isProduction) {
-      console.log("Received:", message.toString());
-    }
-  });
-
-  socket.on("close", () => {
-    if (!isProduction) {
-      console.log("A client disconnected");
-    }
-  });
-});
+setupSignaling(wss);
 
 const PORT = process.env.PORT || 5000;
 

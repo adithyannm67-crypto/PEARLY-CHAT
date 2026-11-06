@@ -12,18 +12,11 @@ import {
   SendHorizontal,
 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
-import { useSupabase } from '@/context/AuthProvider';
 import { useDashboard } from '@/context/DashboardContext';
 import { authFetch } from '@/lib/authFetch';
+import { useWebRTC } from '@/lib/webrtc/useWebRTC';
+import ConnectionStatus from '@/components/webrtc/ConnectionStatus';
 import type { Conversation, Message } from '@/types/chat';
-
-type RealtimeMessageRow = {
-  id: string;
-  conversation_id: string;
-  sender_id: string;
-  content: string;
-  created_at: string;
-};
 
 function getDateKey(ts: string): string {
   const d = new Date(ts);
@@ -66,15 +59,59 @@ function formatMessageTime(ts: string): string {
 
 export default function ChatArea() {
   const { userId, selectedConversation, handleBack, onlineUsers } = useDashboard();
-  const { supabase } = useSupabase();
   const [messageInput, setMessageInput] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const selectedConversationId = selectedConversation?.id ?? null;
+
+  const {
+    connectionState: webrtcConnectionState,
+    isDataChannelOpen,
+    messages: webrtcMessages,
+    connect: connectWebRTC,
+    disconnect: disconnectWebRTC,
+    sendMessage: sendWebRTCMessage,
+  } = useWebRTC({
+    conversationId: selectedConversationId,
+    userId,
+  });
+
+  // Connect/disconnect WebRTC when conversation changes
+  useEffect(() => {
+    if (!selectedConversationId) {
+      disconnectWebRTC();
+      return;
+    }
+    void connectWebRTC();
+    return () => {
+      disconnectWebRTC();
+    };
+  }, [selectedConversationId, connectWebRTC, disconnectWebRTC]);
+
+  // Merge WebRTC messages into local message list
+  useEffect(() => {
+    if (webrtcMessages.length === 0) return;
+
+    void Promise.resolve().then(() => {
+      setLocalMessages((previous) => {
+        const incoming = webrtcMessages.filter(
+          (m) => !previous.some((p) => p.id === m.id),
+        );
+        const mapped: Message[] = incoming.map((m) => ({
+          id: m.id,
+          conversationId: selectedConversationId ?? '',
+          senderId: m.senderId,
+          content: m.content,
+          timestamp: m.timestamp,
+          status: 'sent',
+        }));
+        return [...previous, ...mapped];
+      });
+    });
+  }, [webrtcMessages, selectedConversationId]);
 
   // When selectedConversationId changes, fetch messages from the Next.js API
   useEffect(() => {
@@ -117,44 +154,6 @@ export default function ChatArea() {
     };
   }, [selectedConversationId]);
 
-  useEffect(() => {
-    if (!selectedConversationId) return;
-
-    const channel = supabase
-      .channel(`selectedConversation-messages:${selectedConversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${selectedConversationId}`,
-        },
-        (payload) => {
-          const row = payload.new as RealtimeMessageRow;
-          const incoming: Message = {
-            id: row.id,
-            conversationId: row.conversation_id,
-            senderId: row.sender_id,
-            content: row.content,
-            timestamp: row.created_at,
-            status: 'sent',
-          };
-
-          setLocalMessages((previous) =>
-            previous.some((message) => message.id === incoming.id)
-              ? previous
-              : [...previous, incoming]
-          );
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [selectedConversationId, supabase]);
-
   // Scroll to bottom when localMessages changes
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -164,38 +163,22 @@ export default function ChatArea() {
 
   const handleSend = async () => {
     const trimmed = messageInput.trim();
-    if (!trimmed || !selectedConversationId || !userId || sending) return;
+    if (!trimmed || !userId) return;
 
-    setSending(true);
     setError('');
 
-    try {
-      const response = await authFetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          selectedConversationId,
-          content: trimmed,
-        }),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to send message');
-      }
-
-      const sentMessage = data.data.message as Message;
-      setLocalMessages((previous) =>
-        previous.some((message) => message.id === sentMessage.id)
-          ? previous
-          : [...previous, sentMessage]
-      );
-      setMessageInput('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send message');
-    } finally {
-      setSending(false);
+    if (!isDataChannelOpen) {
+      setError('WebRTC data channel is not open yet. Wait for connection.');
+      return;
     }
+
+    const sent = sendWebRTCMessage(trimmed);
+    if (!sent) {
+      setError('Failed to send message.');
+      return;
+    }
+
+    setMessageInput('');
   };
 
   // Empty State (when no selectedConversation is selected)
@@ -262,6 +245,10 @@ export default function ChatArea() {
 
         {/* Right icons */}
         <div className="flex items-center gap-1">
+          <ConnectionStatus
+            status={webrtcConnectionState}
+            isDataChannelOpen={isDataChannelOpen}
+          />
           <button
             type="button"
             aria-label="Voice call"
@@ -418,10 +405,12 @@ export default function ChatArea() {
           {/* Send button */}
           <button
             type="submit"
-            disabled={!messageInput.trim() || sending || !userId}
+            disabled={
+              !messageInput.trim() || !isDataChannelOpen || !userId
+            }
             aria-label="Send message"
             className={`p-2.5 rounded-full transition-all ${
-              messageInput.trim() && !sending && userId
+              messageInput.trim() && isDataChannelOpen && userId
                 ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
                 : 'bg-surface text-text-secondary cursor-not-allowed'
             }`}
