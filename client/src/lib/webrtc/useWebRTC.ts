@@ -22,6 +22,7 @@ type ConnectionStatus =
 type UseWebRTCOptions = {
   conversationId: string | null;
   userId: string | null;
+  iceConfig?: { iceServers?: { urls: string; username?: string; credential?: string }[] };
 };
 
 type UseWebRTCReturn = {
@@ -37,6 +38,7 @@ type UseWebRTCReturn = {
 export function useWebRTC({
   conversationId,
   userId,
+  iceConfig,
 }: UseWebRTCOptions): UseWebRTCReturn {
   const [connectionState, setConnectionState] = useState<ConnectionStatus>(
     'disconnected',
@@ -72,7 +74,7 @@ export function useWebRTC({
 
   useEffect(() => {
     const client = getSignalingClient();
-    const manager = getPeerConnectionManager();
+    const manager = getPeerConnectionManager(iceConfig);
     const channelMgr = getDataChannelManager();
 
     signalingClientRef.current = client;
@@ -209,14 +211,6 @@ export function useWebRTC({
   const connect = useCallback(async () => {
     if (!conversationId || !userId) return;
     if (currentConversationId.current === conversationId) return;
-
-    // Reset for new conversation
-    currentConversationId.current = conversationId;
-    peerJoinedRef.current = false;
-    isOffererRef.current = false;
-    setMessages([]);
-    setIsDataChannelOpen(false);
-    setConnectionState('connecting');
 
     try {
       const client = signalingClientRef.current;

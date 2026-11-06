@@ -41,6 +41,14 @@ export default function ChatArea() {
   } = useWebRTC({
     conversationId: selectedConversationId,
     userId,
+    iceConfig: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        // Add TURN servers here for relay when direct connectivity fails:
+        // { urls: 'turn:your-turn-server:3478', username: 'user', credential: 'pass' },
+      ],
+    },
   });
 
   // Connect/disconnect WebRTC when conversation changes

@@ -29,6 +29,8 @@ type PeerConnectionHandlers = {
 const DEFAULT_ICE_SERVERS: IceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  // Add TURN servers here for relay when direct connectivity fails:
+  // { urls: 'turn:your-turn-server:3478', username: 'user', credential: 'pass' },
 ];
 
 class PeerConnectionManager {
@@ -287,12 +289,23 @@ class PeerConnectionManager {
 
   private async queueNegotiation<T>(operation: () => Promise<T>): Promise<T> {
     return new Promise((resolve, reject) => {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+      const timeout = setTimeout(() => {
+        reject(new Error('Negotiation timeout'));
+      }, 15000);
+
       this.negotiationQueue.push(async () => {
         try {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
           const result = await operation();
           resolve(result);
         } catch (err) {
           reject(err);
+        } finally {
+          clearTimeout(timeout);
         }
       });
       void this.processQueue();
@@ -306,14 +319,16 @@ class PeerConnectionManager {
 
     this.isNegotiating = true;
 
-    while (this.negotiationQueue.length > 0) {
-      const next = this.negotiationQueue.shift();
-      if (next) {
-        await next();
+    try {
+      while (this.negotiationQueue.length > 0) {
+        const next = this.negotiationQueue.shift();
+        if (next) {
+          await next();
+        }
       }
+    } finally {
+      this.isNegotiating = false;
     }
-
-    this.isNegotiating = false;
   }
 
   async addIceCandidate(
