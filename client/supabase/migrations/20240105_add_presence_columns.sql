@@ -31,7 +31,7 @@ END $$;
 
 -- Recreate public_user_profiles view to include presence columns.
 CREATE OR REPLACE VIEW public.public_user_profiles AS
-SELECT id, username, avatar_url, full_name, is_online, last_seen, created_at
+SELECT id, username, avatar_url, full_name, created_at, is_online, last_seen
 FROM public.users;
 
 REVOKE ALL ON public.public_user_profiles FROM anon, authenticated;
