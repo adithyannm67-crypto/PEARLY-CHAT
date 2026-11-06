@@ -228,9 +228,11 @@ export function useWebRTC({
         addMessage(message);
       },
       onError: (error) => {
+        // Skip benign errors during intentional shutdown
+        if (dataChannelRef.current?.getState() === 'closed') return;
         // Log but don't tear down the connection — data channel errors
         // can be transient or occur during intentional disconnect.
-        console.error('[webrtc] data channel error:', error);
+        console.log('[webrtc] data channel error:', error);
       },
     });
 
