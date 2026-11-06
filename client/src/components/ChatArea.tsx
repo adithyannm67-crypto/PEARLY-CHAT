@@ -124,7 +124,7 @@ export default function ChatArea() {
 
       try {
         const response = await authFetch(
-          `/api/messages?selectedConversationId=${encodeURIComponent(selectedConversationId!)}`,
+          `/api/messages?conversationId=${encodeURIComponent(selectedConversationId!)}`,
           { cache: 'no-store' }
         );
         const data = await response.json();
@@ -137,6 +137,7 @@ export default function ChatArea() {
           setLocalMessages(data.data?.messages ?? []);
         }
       } catch (err) {
+        console.error(err);
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load messages');
         }
