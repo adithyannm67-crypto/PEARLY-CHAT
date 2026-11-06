@@ -188,6 +188,8 @@ class PeerConnectionManager {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
+      console.log(`[RTC:${conversationId}] Offer created and set as local description`);
+
       const offerSdp = pc.localDescription?.sdp;
       if (!offerSdp) {
         throw new Error('Failed to create offer SDP');
@@ -197,6 +199,7 @@ class PeerConnectionManager {
       if (client && client.isConnected()) {
         try {
           client.sendOffer(conversationId, offerSdp);
+          console.log(`[RTC:${conversationId}] Offer sent via signaling`);
         } catch {
           // Socket closed mid-negotiation; ICE candidates are queued
         }
@@ -221,6 +224,8 @@ class PeerConnectionManager {
         return;
       }
 
+      console.log(`[RTC:${conversationId}] Setting remote offer`);
+
       await pc.setRemoteDescription({ type: 'offer', sdp });
       this.remoteDescriptionSet = true;
 
@@ -239,6 +244,8 @@ class PeerConnectionManager {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
+      console.log(`[RTC:${conversationId}] Answer created and set as local description`);
+
       const answerSdp = pc.localDescription?.sdp;
       if (!answerSdp) {
         throw new Error('Failed to create answer SDP');
@@ -248,6 +255,7 @@ class PeerConnectionManager {
       if (client && client.isConnected()) {
         try {
           client.sendAnswer(conversationId, answerSdp);
+          console.log(`[RTC:${conversationId}] Answer sent via signaling`);
         } catch {
           // Socket closed mid-negotiation; ICE candidates are queued
         }
@@ -272,6 +280,8 @@ class PeerConnectionManager {
         this.setState('connecting');
         return;
       }
+
+      console.log(`[RTC:${conversationId}] Setting remote answer`);
 
       await pc.setRemoteDescription({ type: 'answer', sdp });
       this.remoteDescriptionSet = true;

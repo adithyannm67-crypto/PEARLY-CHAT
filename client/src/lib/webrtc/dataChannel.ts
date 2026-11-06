@@ -29,22 +29,25 @@ class DataChannelManager {
   }
 
   attach(channel: RTCDataChannel) {
+    console.log(`[DataChannel] Attaching channel: ${channel.label}`);
     this.channel = channel;
     this.state = 'connecting';
 
     channel.onopen = () => {
+      console.log(`[DataChannel] Opened`);
       this.state = 'open';
       this.handlers.onOpen?.();
     };
 
     channel.onclose = () => {
+      console.log(`[DataChannel] Closed`);
       this.state = 'closed';
       this.channel = null;
       this.handlers.onClose?.();
     };
 
     channel.onerror = (err) => {
-      console.error('[dataChannel] error:', err);
+      console.error(`[DataChannel] Error:`, err);
       this.state = 'failed';
       this.handlers.onError?.('DATA_CHANNEL_ERROR');
     };

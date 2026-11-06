@@ -96,6 +96,7 @@ export function useWebRTC({
         }
       },
       onPeerJoined: (_conversationId, peerUserId) => {
+        console.log(`[WebRTC] Peer joined: ${peerUserId}, I am offerer: ${localUserId.current ? localUserId.current < peerUserId : 'unknown'}`);
         peerJoinedRef.current = true;
         setConnectionState('negotiating');
         if (
@@ -106,8 +107,10 @@ export function useWebRTC({
         ) {
           isOffererRef.current = true;
           void peerManagerRef.current.createOffer(_conversationId).catch((err) => {
-            console.error('[webrtc] create offer error:', err);
+            console.error('[WebRTC] Create offer error:', err);
           });
+        } else {
+          console.log(`[WebRTC] Waiting for offer from peer`);
         }
       },
       onPeerLeft: () => {
