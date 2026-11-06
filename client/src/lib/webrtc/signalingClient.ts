@@ -80,7 +80,7 @@ class SignalingClient {
     }
   }
 
-  async connect(): Promise<void> {
+  async connect(token?: string): Promise<void> {
     if (this.isConnecting || this.isConnected()) {
       return;
     }
@@ -88,12 +88,11 @@ class SignalingClient {
     this.isConnecting = true;
     this.setState('connecting');
 
-    const { data } = await supabase.auth.getSession();
-    const token = data?.session?.access_token;
+    const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
 
     return new Promise((resolve, reject) => {
       try {
-        const ws = new WebSocket(`${this.url}?token=${encodeURIComponent(token ?? '')}`);
+        const ws = new WebSocket(`${this.url}?token=${encodeURIComponent(effectiveToken ?? '')}`);
         this.ws = ws;
 
         ws.onopen = () => {

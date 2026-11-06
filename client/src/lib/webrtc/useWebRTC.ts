@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSupabase } from '@/context/AuthProvider';
 import { getSignalingClient } from './signalingClient';
 import {
   getPeerConnectionManager,
@@ -44,6 +45,8 @@ export function useWebRTC({
     useState<PeerConnectionState>('new');
   const [isDataChannelOpen, setIsDataChannelOpen] = useState(false);
   const [messages, setMessages] = useState<DataChannelMessage[]>([]);
+
+  const { session: authSession, supabase } = useSupabase();
 
   const signalingClientRef = useRef<ReturnType<typeof getSignalingClient>>(
     null,
@@ -214,8 +217,16 @@ export function useWebRTC({
       const client = signalingClientRef.current;
       if (!client) return;
 
-      await client.connect();
-      await client.authenticate();
+      const { data } = await supabase.auth.getSession();
+      const token = data?.session?.access_token;
+
+      if (!token) {
+        setConnectionState('failed');
+        return;
+      }
+
+      await client.connect(token);
+      await client.authenticate(token);
       client.joinRoom(conversationId);
     } catch (err) {
       console.error('[webrtc] connect error:', err);
