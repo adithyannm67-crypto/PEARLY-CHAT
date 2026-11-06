@@ -41,7 +41,8 @@ class PeerConnectionManager {
   private state: PeerConnectionState = 'new';
   private config: RTCConfiguration;
   private conversationId: string | null = null;
-  private negotiating = false;
+  private negotiationQueue: Array<() => Promise<void>> = [];
+  private isNegotiating = false;
 
   constructor(config: PeerConnectionConfig = {}, handlers: PeerConnectionHandlers = {}) {
     this.handlers = handlers;
@@ -154,34 +155,29 @@ class PeerConnectionManager {
   }
 
   async createOffer(conversationId: string): Promise<string> {
-    if (this.negotiating) {
-      throw new Error('Already negotiating');
-    }
+    return this.queueNegotiation(async () => {
+      this.conversationId = conversationId;
+      this.isOfferer = true;
 
-    this.negotiating = true;
-    this.conversationId = conversationId;
-    this.isOfferer = true;
+      // Close any existing peer connection before creating a new one
+      if (this.pc) {
+        this.pc.close();
+        this.pc = null;
+      }
+      if (this.dataChannel) {
+        this.dataChannel.close();
+        this.dataChannel = null;
+      }
 
-    // Close any existing peer connection before creating a new one
-    if (this.pc) {
-      this.pc.close();
-      this.pc = null;
-    }
-    if (this.dataChannel) {
-      this.dataChannel.close();
-      this.dataChannel = null;
-    }
+      const pc = this.createPeerConnection();
+      this.pc = pc;
 
-    const pc = this.createPeerConnection();
-    this.pc = pc;
+      this.dataChannel = pc.createDataChannel('chat', {
+        negotiated: false,
+        ordered: true,
+      });
+      this.handlers.onDataChannel?.(this.dataChannel);
 
-    this.dataChannel = pc.createDataChannel('chat', {
-      negotiated: false,
-      ordered: true,
-    });
-    this.handlers.onDataChannel?.(this.dataChannel);
-
-    try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
@@ -201,24 +197,17 @@ class PeerConnectionManager {
 
       this.setState('connecting');
       return offerSdp;
-    } finally {
-      this.negotiating = false;
-    }
+    });
   }
 
   async setOffer(conversationId: string, sdp: string): Promise<void> {
-    if (this.negotiating) {
-      throw new Error('Already negotiating');
-    }
+    return this.queueNegotiation(async () => {
+      this.conversationId = conversationId;
+      this.isOfferer = false;
 
-    this.negotiating = true;
-    this.conversationId = conversationId;
-    this.isOfferer = false;
+      const pc = this.createPeerConnection();
+      this.pc = pc;
 
-    const pc = this.createPeerConnection();
-    this.pc = pc;
-
-    try {
       await pc.setRemoteDescription({ type: 'offer', sdp });
       this.remoteDescriptionSet = true;
 
@@ -252,26 +241,19 @@ class PeerConnectionManager {
       }
 
       this.setState('connecting');
-    } finally {
-      this.negotiating = false;
-    }
+    });
   }
 
   async setAnswer(conversationId: string, sdp: string): Promise<void> {
-    if (this.negotiating) {
-      throw new Error('Already negotiating');
-    }
+    return this.queueNegotiation(async () => {
+      this.conversationId = conversationId;
 
-    if (!this.pc) {
-      throw new Error('No peer connection to set answer on');
-    }
+      if (!this.pc) {
+        throw new Error('No peer connection to set answer on');
+      }
 
-    this.negotiating = true;
-    this.conversationId = conversationId;
+      const pc = this.pc;
 
-    const pc = this.pc;
-
-    try {
       await pc.setRemoteDescription({ type: 'answer', sdp });
       this.remoteDescriptionSet = true;
 
@@ -288,9 +270,38 @@ class PeerConnectionManager {
       }
 
       this.setState('connecting');
-    } finally {
-      this.negotiating = false;
+    });
+  }
+
+  private async queueNegotiation<T>(operation: () => Promise<T>): Promise<T> {
+    return new Promise((resolve, reject) => {
+      this.negotiationQueue.push(async () => {
+        try {
+          const result = await operation();
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        }
+      });
+      void this.processQueue();
+    });
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.isNegotiating) {
+      return;
     }
+
+    this.isNegotiating = true;
+
+    while (this.negotiationQueue.length > 0) {
+      const next = this.negotiationQueue.shift();
+      if (next) {
+        await next();
+      }
+    }
+
+    this.isNegotiating = false;
   }
 
   async addIceCandidate(
@@ -347,7 +358,8 @@ class PeerConnectionManager {
   }
 
   async close() {
-    this.negotiating = false;
+    this.isNegotiating = false;
+    this.negotiationQueue = [];
 
     if (this.dataChannel) {
       this.dataChannel.close();
