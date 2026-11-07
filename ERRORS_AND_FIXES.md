@@ -158,11 +158,11 @@ change events are delivered for Realtime subscriptions.
     best-effort; the message is still sent via the data channel even if the API
     call fails. `ChatArea.tsx` `handleSend` awaits the async `sendMessage`.
 
-25. **TURN server support added** — `peerConnection.ts` `buildIceServers()`
-    reads `NEXT_PUBLIC_TURN_URL`, `NEXT_PUBLIC_TURN_USERNAME`,
-    `NEXT_PUBLIC_TURN_CREDENTIAL` env vars and adds a TURN server to the ICE
-    config when all three are set. Falls back to two public STUN servers when
-    TURN is not configured. Documented in `client/.env.example`.
+25. **STUN/TURN server config moved to env** — `iceServers.ts` reads STUN
+    servers from `NEXT_PUBLIC_STUN_URLS` (comma-separated, falls back to Google's
+    public STUN servers) and TURN from `NEXT_PUBLIC_TURN_URL` /
+    `NEXT_PUBLIC_TURN_USERNAME` / `NEXT_PUBLIC_TURN_CREDENTIAL`. Documented in
+    `client/.env.example`.
 
 ## Required for Deployment
 
