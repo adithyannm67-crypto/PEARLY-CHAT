@@ -1,10 +1,5 @@
 type IceServer = { urls: string; username?: string; credential?: string };
 
-const DEFAULT_ICE_SERVERS: IceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-];
-
 function parseStunServers(): IceServer[] {
   const servers: IceServer[] = [];
 
@@ -17,7 +12,7 @@ function parseStunServers(): IceServer[] {
     }
   }
 
-  return servers.length > 0 ? servers : DEFAULT_ICE_SERVERS;
+  return servers;
 }
 
 function buildIceServers(): IceServer[] {
@@ -39,4 +34,4 @@ function buildIceServers(): IceServer[] {
 }
 
 export type { IceServer };
-export { DEFAULT_ICE_SERVERS, buildIceServers };
+export { buildIceServers };
