@@ -158,10 +158,10 @@ change events are delivered for Realtime subscriptions.
     best-effort; the message is still sent via the data channel even if the API
     call fails. `ChatArea.tsx` `handleSend` awaits the async `sendMessage`.
 
-25. **STUN/TURN server config moved to backend** — `server/src/api/ice-config/route.js`
-    provides GET /api/ice-config endpoint that generates temporary TURN credentials
-    via Twilio SDK. `client/src/lib/webrtc/iceServers.ts` fetches ICE config from
-    backend via authFetch. No Twilio credentials are exposed to frontend.
+25. **STUN/TURN server config via backend API** — `server/src/api/ice-config/route.js`
+    provides GET /api/ice-config endpoint that returns STUN servers from backend config
+    plus optional temporary TURN credentials via Twilio SDK (optional). Frontend fetches
+    ICE config via authFetch. No Twilio credentials exposed to frontend.
     Documented in `client/.env.example`.
 
 ## Required for Deployment
