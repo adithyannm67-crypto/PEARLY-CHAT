@@ -158,18 +158,18 @@ change events are delivered for Realtime subscriptions.
     best-effort; the message is still sent via the data channel even if the API
     call fails. `ChatArea.tsx` `handleSend` awaits the async `sendMessage`.
 
+25. **TURN server support added** — `peerConnection.ts` `buildIceServers()`
+    reads `NEXT_PUBLIC_TURN_URL`, `NEXT_PUBLIC_TURN_USERNAME`,
+    `NEXT_PUBLIC_TURN_CREDENTIAL` env vars and adds a TURN server to the ICE
+    config when all three are set. Falls back to two public STUN servers when
+    TURN is not configured. Documented in `client/.env.example`.
+
 ## Required for Deployment
 
 The following must be resolved before deploying to production. Without them,
 the app will not work reliably for real users across different networks.
 
-1. **TURN server configured** — Only two public STUN servers
-   (`stun.l.google.com:19302`) are in `DEFAULT_ICE_SERVERS`. WebRTC will fail
-   across symmetric NATs, cellular networks, or restrictive firewalls. Add TURN
-   servers (e.g. Coturn, Twilio, Xirsys) with `username` and `credential` to
-   `DEFAULT_ICE_SERVERS` in `client/src/lib/webrtc/peerConnection.ts`.
-
-2. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
+1. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
    Map is per-process. Works fine on a single server instance, but will break
    if you run multiple replicas (e.g. on Railway, Fly, Render, or Kubernetes).
    Add Redis/pubsub adapter or document single-instance-only deployment.
