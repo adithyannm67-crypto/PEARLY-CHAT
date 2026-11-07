@@ -174,7 +174,7 @@ export default function ChatArea() {
       return;
     }
 
-    const sent = sendWebRTCMessage(trimmed);
+    const sent = await sendWebRTCMessage(trimmed);
     if (!sent) {
       setError('Failed to send message.');
       return;
