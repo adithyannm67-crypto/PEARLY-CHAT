@@ -1,11 +1,9 @@
-import parseBody from "#utils/parseBody.js";
 import HttpError from "#utils/HttpError.js";
 import isUuid from "#utils/isUuid.js";
 import withAuth from "#utils/withAuth.js";
 import {
   deleteConversation,
   getConversations,
-  getOrCreateDirectConversation,
   getUser,
 } from "../../services/chatService.js";
 
@@ -19,27 +17,6 @@ export default async function handler(req) {
     ]);
 
     return { conversations, currentUser };
-  }
-
-  if (req.method === "POST") {
-    const body = await parseBody(req);
-    const { otherUserId } = body;
-
-    if (!isUuid(otherUserId)) {
-      throw new HttpError(400, "A valid otherUserId is required");
-    }
-
-    if (otherUserId === user.id) {
-      throw new HttpError(400, "You cannot start a conversation with yourself");
-    }
-
-    const conversation = await getOrCreateDirectConversation(
-      user.id,
-      otherUserId,
-      accessToken,
-    );
-
-    return { conversation };
   }
 
   if (req.method === "DELETE") {
@@ -56,6 +33,6 @@ export default async function handler(req) {
 
   throw new HttpError(
     405,
-    "Method not allowed. Only GET, POST and DELETE are accepted."
+    "Method not allowed. Only GET and DELETE are accepted."
   );
 }

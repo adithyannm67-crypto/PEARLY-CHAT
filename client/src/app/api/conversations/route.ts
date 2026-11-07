@@ -26,33 +26,6 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
-  if (!hasAuthHeaders(request)) {
-    return NextResponse.json(
-      { success: false, error: 'Authentication required' },
-      { status: 401 }
-    );
-  }
-
-  try {
-    const body = await request.text();
-    const response = await fetch(`${SERVER_URL}/api/conversations`, {
-      method: 'POST',
-      headers: proxyHeaders(request, 'application/json'),
-      body,
-      cache: 'no-store',
-    });
-    const data = await response.json();
-
-    return NextResponse.json(data, { status: response.status });
-  } catch {
-    return NextResponse.json(
-      { success: false, error: 'Failed to reach chat server' },
-      { status: 502 }
-    );
-  }
-}
-
 export async function DELETE(request: Request) {
   if (!hasAuthHeaders(request)) {
     return NextResponse.json(
