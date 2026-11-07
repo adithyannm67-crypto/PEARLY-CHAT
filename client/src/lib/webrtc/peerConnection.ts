@@ -39,6 +39,9 @@ class PeerConnectionManager {
   private ignoreOffer = false;
   private isSettingRemoteAnswerPending = false;
 
+  // ICE restart state
+  private isRestartingIce = false;
+
   private handlers: PeerConnectionHandlers = {};
   private state: PeerConnectionState = "new";
   private config: RTCConfiguration;
@@ -94,13 +97,16 @@ class PeerConnectionManager {
     };
 
     pc.onicecandidateerror = (event) => {
-      console.error("[webrtc] ICE error:", {
+      console.warn("[webrtc] ICE error:", {
         url: event.url,
         errorCode: event.errorCode,
         errorText: event.errorText,
         address: event.address,
         port: event.port,
       });
+      // Individual ICE server failures are logged as warnings only.
+      // The peer connection is NOT closed or restarted here — WebRTC will
+      // continue gathering candidates from other configured ICE servers.
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -114,6 +120,8 @@ class PeerConnectionManager {
           this.setState("new");
           break;
         case "checking":
+          this.setState("connecting");
+          break;
         case "connected":
           this.setState("connected");
           break;
@@ -122,10 +130,15 @@ class PeerConnectionManager {
           break;
         case "disconnected":
           this.setState("disconnected");
+          // Disconnected state is temporary — allow ICE to recover naturally.
+          // Do not trigger ICE restart here; wait for 'failed' if recovery does not occur.
           break;
         case "failed":
           this.setState("failed");
-          this.handlers.onError?.("ICE_CONNECTION_FAILED");
+          // Only trigger ICE restart when ICE has fully failed (no viable candidate pair).
+          // Individual candidate errors (e.g. error 701) are handled separately via onicecandidateerror
+          // and do not trigger this path.
+          void this.restartIce();
           break;
         case "closed":
           this.setState("closed");
@@ -139,6 +152,35 @@ class PeerConnectionManager {
       switch (pc.signalingState) {
         case "stable":
           this.setState("connected");
+          break;
+        case "closed":
+          this.setState("closed");
+          break;
+        default:
+          this.setState("connecting");
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      log(
+        "[CONNECTION]",
+        this.conversationId,
+        `connectionState=${pc.connectionState}`,
+      );
+      switch (pc.connectionState) {
+        case "connecting":
+          this.setState("connecting");
+          break;
+        case "connected":
+          this.setState("connected");
+          break;
+        case "disconnected":
+          this.setState("disconnected");
+          // Disconnected is temporary — allow ICE recovery without restart.
+          break;
+        case "failed":
+          this.setState("failed");
+          this.handlers.onError?.("PEER_CONNECTION_FAILED");
           break;
         case "closed":
           this.setState("closed");
@@ -642,6 +684,80 @@ class PeerConnectionManager {
           candidate.sdpMLineIndex ?? undefined,
         );
       }
+    }
+  }
+
+  /**
+   * Perform an ICE restart on the existing peer connection.
+   *
+   * Called when ICE connection state transitions to 'failed' — meaning no
+   * viable candidate pair could be established. The restart creates a new
+   * offer with fresh ICE credentials and sends it via the existing signaling
+   * channel, allowing the remote peer to respond with a new answer.
+   *
+   * Duplicate restart attempts are prevented via the isRestartingIce flag.
+   * Restart state is cleaned up after success or failure.
+   */
+  async restartIce(): Promise<void> {
+    if (this.isRestartingIce) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "ICE restart already in progress, skipping",
+      );
+      return;
+    }
+
+    if (!this.pc) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "no peer connection, skipping restart",
+      );
+      return;
+    }
+
+    this.isRestartingIce = true;
+    log("[ICE-RESTART]", this.conversationId, "starting ICE restart");
+
+    try {
+      await this.pc.restartIce();
+      log("[ICE-RESTART]", this.conversationId, "ICE restart initiated on RTCPeerConnection");
+
+      // Create a new offer with the restarted ICE credentials
+      const offer = await this.pc.createOffer();
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "createOffer completed after ICE restart",
+        { type: offer.type, sdpLength: offer.sdp?.length },
+      );
+      await this.pc.setLocalDescription(offer);
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "setLocalDescription completed after ICE restart",
+        { localDescriptionSdp: !!this.pc.localDescription?.sdp },
+      );
+
+      const offerSdp = this.pc.localDescription?.sdp;
+      if (!offerSdp) {
+        throw new Error("Failed to create offer SDP after ICE restart");
+      }
+
+      // Send the new offer via the existing signaling channel so the
+      // remote peer can respond with a new answer.
+      await this.sendOfferViaSignaling(offerSdp);
+      log("[ICE-RESTART]", this.conversationId, "ICE restart offer sent via signaling");
+    } catch (err) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "ICE restart failed",
+        { error: err instanceof Error ? err.message : String(err) },
+      );
+    } finally {
+      this.isRestartingIce = false;
     }
   }
 
