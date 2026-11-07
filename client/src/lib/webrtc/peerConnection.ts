@@ -1,4 +1,5 @@
 import { getSignalingClient } from "./signalingClient";
+import { log } from "./logger";
 
 type IceServer = { urls: string; username?: string; credential?: string };
 
@@ -30,28 +31,6 @@ const DEFAULT_ICE_SERVERS: IceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
 ];
-
-function getBrowserName(): string {
-  const ua = navigator.userAgent;
-  if (ua.includes("Firefox")) return "Firefox";
-  if (ua.includes("Edg/")) return "Edge";
-  if (ua.includes("Chrome")) return "Chrome";
-  if (ua.includes("Safari")) return "Safari";
-  return "Unknown";
-}
-
-function log(
-  prefix: string,
-  convId: string | null,
-  message: string,
-  data?: unknown,
-) {
-  const conv = convId ?? "-";
-  const payload = data !== undefined ? ` ${JSON.stringify(data)}` : "";
-  console.log(
-    `[${prefix}] ${getBrowserName()} conv=${conv} ${new Date().toISOString()} ${message}${payload}`,
-  );
-}
 
 class PeerConnectionManager {
   private pc: RTCPeerConnection | null = null;

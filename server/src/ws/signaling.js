@@ -287,6 +287,9 @@ async function handleSignaling(socket, payload, type) {
   if (type === "OFFER") {
     console.log(`[SERVER-OFFER] OFFER received ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId}`);
   }
+  if (type === "ANSWER") {
+    console.log(`[SERVER-OFFER] ANSWER received ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId}`);
+  }
   if (type === "ICE_CANDIDATE") {
     const candType = typeof payload.candidate === "string" ? payload.candidate.split(" ")[0] : "unknown";
     console.log(`[SERVER-OFFER] ICE_CANDIDATE received ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId} candidateType=${candType}`);
@@ -296,6 +299,9 @@ async function handleSignaling(socket, payload, type) {
 
   if (type === "OFFER") {
     console.log(`[SERVER-OFFER] OFFER forwarded ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId} recipients=${recipients.map((s) => s.userId)}`);
+  }
+  if (type === "ANSWER") {
+    console.log(`[SERVER-OFFER] ANSWER forwarded ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId} recipients=${recipients.map((s) => s.userId)}`);
   }
   if (type === "ICE_CANDIDATE") {
     const candType = typeof payload.candidate === "string" ? payload.candidate.split(" ")[0] : "unknown";
