@@ -94,7 +94,13 @@ class PeerConnectionManager {
     };
 
     pc.onicecandidateerror = (event) => {
-      console.error("[webrtc] ICE candidate error:", event);
+      console.error("[webrtc] ICE error:", {
+        url: event.url,
+        errorCode: event.errorCode,
+        errorText: event.errorText,
+        address: event.address,
+        port: event.port,
+      });
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -144,18 +150,14 @@ class PeerConnectionManager {
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        const candidateType = event.candidate.candidate.split(" ")[0] ?? "unknown";
-        log(
-          "[ICE-GATHERING]",
-          this.conversationId,
-          "onicecandidate fired",
-          {
-            candidate: event.candidate.candidate.slice(0, 80),
-            type: candidateType,
-            sdpMid: event.candidate.sdpMid,
-            sdpMLineIndex: event.candidate.sdpMLineIndex,
-          },
-        );
+        const candidateType =
+          event.candidate.candidate.split(" ")[0] ?? "unknown";
+        log("[ICE-GATHERING]", this.conversationId, "onicecandidate fired", {
+          candidate: event.candidate.candidate.slice(0, 80),
+          type: candidateType,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex,
+        });
         const candidate: RTCIceInitLocal = {
           candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid,
@@ -301,20 +303,14 @@ class PeerConnectionManager {
     }
 
     this.makingOffer = true;
-    log(
-      "[NEGOTIATE]",
-      this.conversationId,
-      "makingOffer=true, creating offer",
-    );
+    log("[NEGOTIATE]", this.conversationId, "makingOffer=true, creating offer");
 
     try {
       const offer = await this.pc.createOffer();
-      log(
-        "[OFFER-SEND]",
-        this.conversationId,
-        "createOffer completed",
-        { type: offer.type, sdpLength: offer.sdp?.length },
-      );
+      log("[OFFER-SEND]", this.conversationId, "createOffer completed", {
+        type: offer.type,
+        sdpLength: offer.sdp?.length,
+      });
       await this.pc.setLocalDescription(offer);
       log(
         "[OFFER-SEND]",
@@ -330,19 +326,12 @@ class PeerConnectionManager {
 
       await this.sendOfferViaSignaling(offerSdp);
     } catch (err) {
-      log(
-        "[NEGOTIATE]",
-        this.conversationId,
-        "negotiate failed",
-        { error: err instanceof Error ? err.message : String(err) },
-      );
+      log("[NEGOTIATE]", this.conversationId, "negotiate failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       this.makingOffer = false;
-      log(
-        "[NEGOTIATE]",
-        this.conversationId,
-        "makingOffer=false",
-      );
+      log("[NEGOTIATE]", this.conversationId, "makingOffer=false");
     }
   }
 
@@ -351,12 +340,9 @@ class PeerConnectionManager {
    * Implements Perfect Negotiation collision handling.
    */
   async handleOffer(conversationId: string, sdp: string): Promise<void> {
-    log(
-      "[EDGE-OFFER]",
-      conversationId,
-      "handleOffer called",
-      { sdpLength: sdp?.length },
-    );
+    log("[EDGE-OFFER]", conversationId, "handleOffer called", {
+      sdpLength: sdp?.length,
+    });
 
     if (!this.pc) {
       log("[EDGE-OFFER]", conversationId, "no peer connection, creating one");
@@ -394,30 +380,22 @@ class PeerConnectionManager {
 
     await this.pc.setRemoteDescription({ type: "offer", sdp });
     this.remoteDescriptionSet = true;
-    log(
-      "[EDGE-OFFER]",
-      conversationId,
-      "setRemoteDescription completed",
-      { remoteDescriptionSet: this.remoteDescriptionSet },
-    );
+    log("[EDGE-OFFER]", conversationId, "setRemoteDescription completed", {
+      remoteDescriptionSet: this.remoteDescriptionSet,
+    });
 
     // Flush queued ICE candidates now that remote description is set
     await this.flushIceCandidatesToPC();
 
     const answer = await this.pc.createAnswer();
-    log(
-      "[ANSWER]",
-      conversationId,
-      "createAnswer completed",
-      { type: answer.type, sdpLength: answer.sdp?.length },
-    );
+    log("[ANSWER]", conversationId, "createAnswer completed", {
+      type: answer.type,
+      sdpLength: answer.sdp?.length,
+    });
     await this.pc.setLocalDescription(answer);
-    log(
-      "[ANSWER]",
-      conversationId,
-      "setLocalDescription(answer) completed",
-      { localDescriptionSdp: !!this.pc.localDescription?.sdp },
-    );
+    log("[ANSWER]", conversationId, "setLocalDescription(answer) completed", {
+      localDescriptionSdp: !!this.pc.localDescription?.sdp,
+    });
 
     const answerSdp = this.pc.localDescription?.sdp;
     if (!answerSdp) {
@@ -432,12 +410,9 @@ class PeerConnectionManager {
    * Implements rollback for offer collisions.
    */
   async handleAnswer(conversationId: string, sdp: string): Promise<void> {
-    log(
-      "[ANSWER]",
-      conversationId,
-      "handleAnswer called",
-      { sdpLength: sdp?.length },
-    );
+    log("[ANSWER]", conversationId, "handleAnswer called", {
+      sdpLength: sdp?.length,
+    });
 
     if (this.isSettingRemoteAnswerPending) {
       log(
@@ -458,21 +433,13 @@ class PeerConnectionManager {
 
       if (this.pc) {
         await this.pc.setLocalDescription({ type: "rollback" });
-        log(
-          "[ANSWER]",
-          conversationId,
-          "rollback completed",
-        );
+        log("[ANSWER]", conversationId, "rollback completed");
       }
 
       this.makingOffer = false;
 
       // Re-negotiate after rollback
-      log(
-        "[ANSWER]",
-        conversationId,
-        "re-negotiating after rollback",
-      );
+      log("[ANSWER]", conversationId, "re-negotiating after rollback");
       await this.negotiate();
     } else {
       this.isSettingRemoteAnswerPending = true;
@@ -510,18 +477,13 @@ class PeerConnectionManager {
   ): Promise<void> {
     const candidateType =
       typeof candidate === "string" ? candidate.split(" ")[0] : "unknown";
-    log(
-      "[ICE-ADD]",
-      conversationId,
-      "addIceCandidate called",
-      {
-        candidate:
-          typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
-        type: candidateType,
-        sdpMid,
-        sdpMLineIndex,
-      },
-    );
+    log("[ICE-ADD]", conversationId, "addIceCandidate called", {
+      candidate:
+        typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
+      type: candidateType,
+      sdpMid,
+      sdpMLineIndex,
+    });
 
     const iceCandidate: RTCIceInitLocal = {
       candidate: typeof candidate === "string" ? candidate : undefined,
@@ -552,29 +514,19 @@ class PeerConnectionManager {
         sdpMid: iceCandidate.sdpMid ?? undefined,
         sdpMLineIndex: iceCandidate.sdpMLineIndex ?? undefined,
       });
-      log(
-        "[ICE-ADD]",
-        conversationId,
-        "addIceCandidate succeeded",
-        {
-          candidate:
-            typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
-          type: candidateType,
-          sdpMid,
-          sdpMLineIndex,
-        },
-      );
+      log("[ICE-ADD]", conversationId, "addIceCandidate succeeded", {
+        candidate:
+          typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
+        type: candidateType,
+        sdpMid,
+        sdpMLineIndex,
+      });
     } catch (err) {
-      log(
-        "[ICE-ADD]",
-        conversationId,
-        "addIceCandidate failed",
-        {
-          error: err instanceof Error ? err.message : String(err),
-          candidate:
-            typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
-        },
-      );
+      log("[ICE-ADD]", conversationId, "addIceCandidate failed", {
+        error: err instanceof Error ? err.message : String(err),
+        candidate:
+          typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
+      });
     }
   }
 
@@ -628,11 +580,16 @@ class PeerConnectionManager {
   private async sendIceCandidate(candidate: RTCIceInitLocal) {
     const client = getSignalingClient();
     if (!client || !this.conversationId || !client.isConnected()) {
-      log("[ICE-SEND]", this.conversationId, "sendIceCandidate skipped (socket not ready)", {
-        hasClient: !!client,
-        hasConversationId: !!this.conversationId,
-        wsConnected: client?.isConnected() ?? false,
-      });
+      log(
+        "[ICE-SEND]",
+        this.conversationId,
+        "sendIceCandidate skipped (socket not ready)",
+        {
+          hasClient: !!client,
+          hasConversationId: !!this.conversationId,
+          wsConnected: client?.isConnected() ?? false,
+        },
+      );
       this.iceCandidateQueue.push(candidate);
       return;
     }
@@ -667,12 +624,17 @@ class PeerConnectionManager {
       const candidate = this.iceCandidateQueue.shift();
       if (candidate) {
         const candidateType = candidate.candidate?.split(" ")[0] ?? "unknown";
-        log("[ICE-SEND]", this.conversationId, "flushing queued ICE candidate", {
-          candidate: candidate.candidate?.slice(0, 80),
-          type: candidateType,
-          sdpMid: candidate.sdpMid,
-          sdpMLineIndex: candidate.sdpMLineIndex,
-        });
+        log(
+          "[ICE-SEND]",
+          this.conversationId,
+          "flushing queued ICE candidate",
+          {
+            candidate: candidate.candidate?.slice(0, 80),
+            type: candidateType,
+            sdpMid: candidate.sdpMid,
+            sdpMLineIndex: candidate.sdpMLineIndex,
+          },
+        );
         client.sendIceCandidate(
           this.conversationId,
           candidate.candidate ?? undefined,
