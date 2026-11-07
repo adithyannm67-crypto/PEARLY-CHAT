@@ -20,6 +20,7 @@ export function usePresence(userId: string | null): UsePresenceReturn {
   const [onlineUsers, setOnlineUsers] = useState<Map<string, boolean>>(
     new Map()
   );
+  const [isOwnOnline, setIsOwnOnline] = useState(false);
 
   const setOwnStatus = useCallback(
     async (isOnline: boolean) => {
@@ -33,6 +34,7 @@ export function usePresence(userId: string | null): UsePresenceReturn {
             last_seen: new Date().toISOString(),
           }),
         });
+        setIsOwnOnline(isOnline);
       } catch {
         // Presence updates are best-effort.
       }
@@ -105,6 +107,7 @@ export function usePresence(userId: string | null): UsePresenceReturn {
             online: true,
             last_seen: new Date().toISOString(),
           });
+          setIsOwnOnline(true);
         } catch {
           // Ignore track errors on subscribe.
         }
@@ -144,6 +147,7 @@ export function usePresence(userId: string | null): UsePresenceReturn {
         // Ignore untrack errors during cleanup.
       }
       void setOwnStatus(false);
+      setIsOwnOnline(false);
       try {
         supabase.removeChannel(channel);
       } catch {
@@ -152,8 +156,6 @@ export function usePresence(userId: string | null): UsePresenceReturn {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [userId, setOwnStatus]);
-
-  const isOwnOnline = onlineUsers.get(userId ?? '') ?? false;
 
   return {
     onlineUsers,
