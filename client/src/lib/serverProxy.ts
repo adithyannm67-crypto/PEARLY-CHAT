@@ -1,9 +1,14 @@
-export const SERVER_URL =
-  process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:5000';
+export const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL;
+
+if (!SERVER_URL) {
+  throw new Error(
+    'NEXT_PUBLIC_SERVER_URL must be set in environment variables',
+  );
+}
 
 export function hasAuthHeaders(request: Request): boolean {
   return Boolean(
-    request.headers.get('authorization') || request.headers.get('cookie')
+    request.headers.get('authorization') || request.headers.get('cookie'),
   );
 }
 

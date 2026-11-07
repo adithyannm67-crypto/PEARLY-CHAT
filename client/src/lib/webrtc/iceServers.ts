@@ -3,7 +3,46 @@ import { SERVER_URL } from "@/lib/serverProxy";
 
 type IceServer = { urls: string; username?: string; credential?: string };
 
-export async function fetchIceServers(): Promise<IceServer[]> {
+function parseStunServers(): IceServer[] {
+  const servers: IceServer[] = [];
+
+  for (let i = 1; i <= 5; i++) {
+    const url = (process.env as Record<string, string | undefined>)[
+      `NEXT_PUBLIC_STUN_URL_${i}`
+    ];
+    if (url && url.trim()) {
+      servers.push({ urls: url.trim() });
+    }
+  }
+
+  return servers;
+}
+
+function buildIceServers(): IceServer[] {
+  const servers = parseStunServers();
+
+  if (servers.length === 0) {
+    throw new Error(
+      'At least one NEXT_PUBLIC_STUN_URL_N environment variable must be set',
+    );
+  }
+
+  const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
+  const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
+  const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    servers.push({
+      urls: turnUrl,
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return servers;
+}
+
+async function fetchIceServers(): Promise<IceServer[]> {
   try {
     const response = await authFetch(`${SERVER_URL}/api/ice-config`);
     if (!response.ok) {
@@ -17,3 +56,4 @@ export async function fetchIceServers(): Promise<IceServer[]> {
 }
 
 export type { IceServer };
+export { buildIceServers, fetchIceServers };

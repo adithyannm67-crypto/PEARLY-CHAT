@@ -53,7 +53,7 @@ class SignalingClient {
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
-    const wsUrl = SERVER_URL.replace(/^http(?=s?)/, 'ws');
+    const wsUrl = SERVER_URL!.replace(/^http(?=s?)/, 'ws');
     this.url = `${wsUrl}`;
   }
 
