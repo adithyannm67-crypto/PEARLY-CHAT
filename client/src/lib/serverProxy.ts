@@ -1,7 +1,5 @@
 export const SERVER_URL =
-  process.env.SERVER_URL ||
-  process.env.NEXT_PUBLIC_SERVER_URL ||
-  'http://localhost:5000';
+  process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:5000';
 
 export function hasAuthHeaders(request: Request): boolean {
   return Boolean(
