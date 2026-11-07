@@ -5,8 +5,19 @@ const DEFAULT_ICE_SERVERS: IceServer[] = [
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
+function parseStunServers(): IceServer[] {
+  const raw = process.env.NEXT_PUBLIC_STUN_URLS;
+  if (!raw) return DEFAULT_ICE_SERVERS;
+
+  return raw
+    .split(",")
+    .map((url) => url.trim())
+    .filter(Boolean)
+    .map((url) => ({ urls: url }));
+}
+
 function buildIceServers(): IceServer[] {
-  const servers = [...DEFAULT_ICE_SERVERS];
+  const servers = [...parseStunServers()];
 
   const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
   const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
