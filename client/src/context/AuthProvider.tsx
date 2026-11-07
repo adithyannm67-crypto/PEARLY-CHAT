@@ -88,7 +88,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
-    const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:5000';
+    const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL
+
+    if(!serverUrl) {
+      throw new Error("NEXT_PUBLIC_SERVER_URL is not defined");
+    }
 
     try {
       await authFetch(`${serverUrl}/api/auth/logout`, {

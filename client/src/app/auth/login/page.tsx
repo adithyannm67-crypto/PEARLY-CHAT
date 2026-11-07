@@ -26,7 +26,11 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || "http://localhost:5000";
+  const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL;
+
+  if(!SERVER_URL) {
+    throw new Error("SERVER_URL is not defined");
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
