@@ -152,6 +152,12 @@ change events are delivered for Realtime subscriptions.
     `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `.env` already
     defines both names.
 
+24. **WebRTC data channel messages persisted** — `useWebRTC.ts` `sendMessage`
+    now POSTs to `/api/messages` via `authFetch` after sending via the data
+    channel, so chat history persists across page refreshes. Persistence is
+    best-effort; the message is still sent via the data channel even if the API
+    call fails. `ChatArea.tsx` `handleSend` awaits the async `sendMessage`.
+
 ## Required for Deployment
 
 The following must be resolved before deploying to production. Without them,
@@ -163,26 +169,19 @@ the app will not work reliably for real users across different networks.
    servers (e.g. Coturn, Twilio, Xirsys) with `username` and `credential` to
    `DEFAULT_ICE_SERVERS` in `client/src/lib/webrtc/peerConnection.ts`.
 
-2. **WebRTC data channel messages persisted** — Messages sent over the WebRTC
-   data channel bypass `/api/messages` entirely and exist only in client
-   memory. Chat history is lost on page refresh and not visible to the other
-   peer unless they are online at the same time. Mirror data channel messages
-   to `/api/messages` via `authFetch` so they are stored in Supabase and
-   retrievable via `GET /api/messages`.
-
-3. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
+2. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
    Map is per-process. Works fine on a single server instance, but will break
    if you run multiple replicas (e.g. on Railway, Fly, Render, or Kubernetes).
    Add Redis/pubsub adapter or document single-instance-only deployment.
 
 ## Optional / Refactoring / Nice-to-Have
 
-4. **Server env var validation** — `supabase-auth.js` and `supabase.js` throw
+3. **Server env var validation** — `supabase-auth.js` and `supabase.js` throw
    if `SUPABASE_URL`/`SUPABASE_ANON_KEY` are missing, but there is no startup
    validation for `CLIENT_URL`, `SERVER_URL`, etc. Add a startup check that
    fails fast with clear messages instead of cryptic runtime crashes.
 
-5. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
+4. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
    to `logger.ts`; verify no other files re-implement the same helper.
 
 ## Verification Checklist
