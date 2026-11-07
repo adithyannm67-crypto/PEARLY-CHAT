@@ -121,7 +121,7 @@ class SignalingClient {
             }
             this.handleMessage(message);
           } catch {
-            console.log('[signaling] malformed WebSocket message:', event.data?.slice(0, 200));
+            log('[signaling]', null, 'malformed WebSocket message', event.data?.slice(0, 200));
           }
         };
 
