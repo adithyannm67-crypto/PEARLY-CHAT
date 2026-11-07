@@ -32,6 +32,24 @@ const DEFAULT_ICE_SERVERS: IceServer[] = [
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
+function buildIceServers(): IceServer[] {
+  const servers = [...DEFAULT_ICE_SERVERS];
+
+  const turnUrl = process.env.NEXT_PUBLIC_TURN_URL;
+  const turnUsername = process.env.NEXT_PUBLIC_TURN_USERNAME;
+  const turnCredential = process.env.NEXT_PUBLIC_TURN_CREDENTIAL;
+
+  if (turnUrl && turnUsername && turnCredential) {
+    servers.push({
+      urls: turnUrl,
+      username: turnUsername,
+      credential: turnCredential,
+    });
+  }
+
+  return servers;
+}
+
 class PeerConnectionManager {
   private pc: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
@@ -58,7 +76,7 @@ class PeerConnectionManager {
   ) {
     this.handlers = handlers;
     this.config = {
-      iceServers: config.iceServers ?? DEFAULT_ICE_SERVERS,
+      iceServers: config.iceServers ?? buildIceServers(),
       iceTransportPolicy: "all",
     };
   }
