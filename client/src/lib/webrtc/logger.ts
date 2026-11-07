@@ -16,6 +16,6 @@ export function log(
   const conv = convId ?? "-";
   const payload = data !== undefined ? ` ${JSON.stringify(data)}` : "";
   console.log(
-    `[${prefix}] ${getBrowserName()} conv=${conv} ${new Date().toISOString()} ${message}${payload}`,
+    `[${prefix}] conv=${conv} ${new Date().toISOString()} ${message}${payload}`,
   );
 }
