@@ -266,6 +266,16 @@ export function useWebRTC({
     };
   }, [addMessage]);
 
+  // Sync connectionState from peerConnectionManager state
+  // Sync connectionState from peerConnectionManager state
+  useEffect(() => {
+    const manager = getPeerConnectionManager();
+    const managerState = manager.getState() as ConnectionStatus;
+    if (connectionState !== managerState) {
+      setConnectionState(managerState);
+    }
+  }, [getPeerConnectionManager().getState()]);
+
   useEffect(() => {
     localUserId.current = userId;
   }, [userId]);
@@ -280,7 +290,11 @@ export function useWebRTC({
     peerUserIdRef.current = null;
     setMessages([]);
     setIsDataChannelOpen(false);
-    setConnectionState('connecting');
+    
+    // Only set connecting if not already connected/connecting
+    if (connectionState !== 'connected' && connectionState !== 'connecting') {
+      setConnectionState('connecting');
+    }
 
     try {
       const client = signalingClientRef.current;
