@@ -282,7 +282,6 @@ export function useWebRTC({
 
   const connect = useCallback(async () => {
     if (!conversationId || !userId) return;
-    if (currentConversationId.current === conversationId) return;
 
     // Reset for new conversation
     currentConversationId.current = conversationId;
@@ -290,7 +289,7 @@ export function useWebRTC({
     peerUserIdRef.current = null;
     setMessages([]);
     setIsDataChannelOpen(false);
-    
+
     // Only set connecting if not already connected/connecting
     if (connectionState !== 'connected' && connectionState !== 'connecting') {
       setConnectionState('connecting');
