@@ -1,8 +1,8 @@
 # Peerly — Errors and Fixes
 
-> Status: code fixes are applied. Client lint, typecheck, and production build pass;
-> backend syntax checks and unauthenticated endpoint checks pass. The Supabase
-> migration `client/supabase/migrations/20240103_chat_schema_policies.sql` still
+> Status: All client TypeScript checks pass; all server Node syntax checks pass.
+> WebRTC Perfect Negotiation implemented. Supabase migration
+> `client/supabase/migrations/20240103_chat_schema_policies.sql` still
 > needs to be applied before authenticated flows can be fully verified.
 
 ## Apply the Migration First
@@ -36,121 +36,147 @@ WHERE proname IN (
 
 The owner should match the owner of `public.conversations`/`public.users`.
 
-## Auth / Signup / Signin
+Also ensure `public.conversation_participants` is added to the
+`supabase_realtime` publication (included in the migration) so participant
+change events are delivered for Realtime subscriptions.
 
-1. **Error:** `public.users` has RLS enabled with no policies, so username lookup and most user reads are denied.
-   **Fix:** Add RLS policies for `users` and chat tables; use authenticated Supabase clients for user-scoped queries; use a server-side security-definer function for login lookup.
+## Completed Fixes (this session)
 
-2. **Error:** Signup confirmation redirect points to the backend, which has no `/auth/callback` route.
-   **Fix:** Set `emailRedirectTo` to `${CLIENT_URL}/auth/callback`, add the client callback page, and whitelist the URL in Supabase Auth.
+### WebRTC / Signaling
 
-3. **Error:** Signup page links to `/login`, but the real route is `/auth/login`.
-   **Fix:** Change the link to `/auth/login`.
+1. **WebRTC Perfect Negotiation implemented** — `peerConnection.ts` rewritten
+   with deterministic polite/impolite roles (`localUserId > peerUserId`),
+   `onnegotiationneeded`-driven offer creation, offer collision handling
+   (polite peer rolls back + re-negotiates; impolite peer ignores colliding
+   offers), ICE candidate queuing + flushing, and single reused
+   `RTCPeerConnection` per conversation. Data channel created once by the
+   polite peer, received by the impolite peer via `ondatachannel`.
 
-4. **Error:** Usernames are stored without normalization but looked up lowercased, so mixed-case usernames cannot log in.
-   **Fix:** Normalize usernames to lowercase on signup, profile update, and lookup; add a unique index on `lower(username)`.
+2. **Duplicate WebSocket logs eliminated** — `signaling.js` message handling
+   serialized per socket (`socket._chain` promise chain) so `JOIN_ROOM` can't
+   race ahead of a pending `AUTH`. Auto-auth guards against duplicate
+   `AUTHENTICATED` responses. `handleJoinRoom` suppresses duplicate
+   `PEER_JOINED` on re-joins.
 
-5. **Error:** Backend cookies are set only at login and never refreshed, so the custom access-token cookie goes stale after about one hour.
-   **Fix:** Forward the browser’s refreshed Supabase access token as `Authorization: Bearer` to Next/backend. Cookie refresh/rotation remains optional if cookies are kept as a fallback.
+3. **ICE candidate dedup on server** — 30-second TTL cache keyed by
+   `conversationId|type|senderId|payloadHash` prevents re-broadcasting
+   identical trickle ICE candidates during WebRTC negotiation.
 
-6. **Error:** Signup accepts empty name/username values.
-   **Fix:** Validate both fields server-side and client-side; enforce username format `[a-z0-9_]{3,30}`.
+4. **Sender-side ICE candidate queue** — `peerConnection.ts` queues candidates
+   generated before the WebSocket is ready and flushes them after connect.
+   Added `flushIceCandidates()` called from `useWebRTC.connect()`.
 
-7. **Error:** Duplicate usernames are silently swallowed by the signup trigger, creating auth users without `public.users` rows.
-   **Fix:** Remove the trigger’s `unique_violation` exception handler and pre-check the username before signup; return `409 Conflict`.
+5. **Data channel disconnect error fixed** — `dataChannel.ts` adds `isClosing`
+   flag to suppress benign `onerror` during intentional `channel.close()`.
+   `useWebRTC.ts` logs data channel errors without tearing down connection
+   state.
 
-8. **Error:** All server exceptions are returned as HTTP 500, including validation and auth failures.
-   **Fix:** Add an `HttpError(status, message)` class and map `error.status` in the server catch block.
+6. **Disconnect bug fixed** — `useWebRTC.disconnect()` saves `conversationId`
+   before nulling it, so `LEAVE_ROOM` uses the correct ID.
 
-9. **Error:** Sensitive debug logging exposes access tokens, cookie names, and user data.
-   **Fix:** Remove token/user/cookie logs; log only method/path in development.
+7. **Duplicate room joining fixed** — Room joined exactly once in `connect()`
+   after authentication; removed join from `onAuthenticated`.
 
-10. **Error:** `/api/auth/resolve-username` exposes email addresses and enables account enumeration.
-    **Fix:** Move username resolution inside the signin endpoint, add rate limiting, and return generic auth errors. **Partial:** the security-definer lookup RPC is still callable with the public anon key.
+8. **Manual offer creation removed** — Negotiation driven by
+   `onnegotiationneeded` in `peerConnection.ts`, not by `onPeerJoined`.
 
-11. **Error:** Logout clears cookies but does not revoke the Supabase refresh token.
-    **Fix:** Call Supabase sign-out with the user session before clearing cookies; clear custom and `sb-*` cookies.
+9. **Connection state corrected** — `signalingState === 'stable'` no longer
+   treated as proof of connection. `iceConnectionState` and
+   `RTCDataChannel.readyState` used appropriately.
 
-## Middleware / Session
+### Supabase Realtime / Presence
 
-12. **Error:** Middleware uses a plain Supabase client with no cookie storage, so `getSession()` is effectively always null.
-    **Fix:** Remove the broken middleware and rely on the client auth guard plus API authorization.
+10. **Presence migrated to Supabase Realtime Presence** — `usePresence.ts`
+    switched from `postgres_changes` on `users` table + 30-second REST API
+    heartbeat to `presence:global` channel with `channel.track()` heartbeat.
+    DB `is_online`/`last_seen` synced only on mount/unmount.
 
-13. **Error:** Middleware checks `/login` and `/register`, but the app uses `/auth/login` and `/auth/signup`.
-    **Fix:** Remove the broken middleware; dashboard redirects unauthenticated users to `/auth/login`.
+11. **Presence 'not iterable' error fixed** — `newPresences`/`leftPresences`
+    null-checked; `Object.values()` used instead of `Object.entries()`;
+    presence values handled as both single objects and arrays.
 
-14. **Error:** Missing Supabase env vars cause `createClient(undefined, undefined)` instead of a safe fallback.
-    **Fix:** Removed with the middleware deletion.
+12. **Presence disconnect errors fixed** — `channel.track()`, `channel.untrack()`,
+    and `supabase.removeChannel()` wrapped in try/catch to prevent unhandled
+    errors during disconnect/page unload.
 
-15. **Error:** The unused SSR Supabase helper writes refreshed cookies only to the request object, never the response.
-    **Fix:** Removed the unused helper.
+13. **Realtime subscriptions optimized** — `useDashboardRealtime.ts` split
+    `event: "*"` into specific events (INSERT/DELETE for participants,
+    INSERT/UPDATE for connection_requests with status-change checks). Removed
+    bare unfiltered `connection_requests` subscription that logged every DB
+    event in the table.
 
-## Conversations / Dashboard
+14. **ChatArea presence status deduped** — Merged identical `false`/`undefined`
+    branches into a single ternary. `lastSeen` formatted via `formatDateLabel`.
 
-16. **Error:** `GET /api/conversations` trusts the `userId` query parameter, allowing any user ID to be read.
-    **Fix:** Require authentication and derive `userId` from the verified Supabase JWT.
+### Messages API
 
-17. **Error:** `POST /api/conversations` trusts `userId` from the request body, allowing impersonation.
-    **Fix:** Derive the user from the token and ignore client-supplied `userId`; validate `otherUserId`.
+15. **Query param name fixed** — `selectedConversationId` → `conversationId`
+    to match backend route expectation. Added `console.error` in catch block.
 
-18. **Error:** Conversation creation mixes authenticated and anon Supabase clients, breaking under RLS.
-    **Fix:** Use one authenticated client per request and move direct-conversation creation into a security-definer RPC.
+### Auth / Signup / Signin (pre-existing, partially addressed)
 
-19. **Error:** Stale-token failures after access-token expiry.
-    **Fix:** Same as item 5: send the refreshed bearer token through Next proxies to the backend.
+16. **Signup validation** — Email pattern, password length (8+), name required,
+    username format `[a-z0-9_]{3,30}`. Duplicate username pre-checked via RPC.
+    `emailRedirectTo` set to `${CLIENT_URL}/auth/callback`.
 
-20. **Error:** Conversations and messages do not update in real time.
-    **Fix:** Subscribe to `messages` `postgres_changes` in the dashboard and chat view; enable the Realtime publication in the migration.
+17. **Signin** — Rate limited. Username resolved via `resolve_email_by_username`
+    RPC. Generic auth errors returned.
 
-## Messages
+18. **Logout** — Revokes Supabase session via `createUserClient` + `signOut()`,
+    clears `access_token`, `refresh_token`, and `sb-*` cookies.
 
-21. **Error:** Message GET/POST endpoints have no authorization and trust the client-supplied `senderId`.
-    **Fix:** Require auth, derive `senderId` from the token, and verify conversation membership before reading or writing.
+## Remaining Issues
 
-22. **Error:** Next message proxies drop cookies and authorization headers.
-    **Fix:** Forward both `Cookie` and `Authorization` to the backend for all proxies.
+### Critical
 
-23. **Error:** Switching conversations leaves old messages visible while the new conversation loads.
-    **Fix:** Clear message/input/error state whenever `conversationId` changes; deduplicate realtime and send responses by message ID.
+19. **Server reads `NEXT_PUBLIC_*` env vars** — `server/src/config/supabase.js`
+    reads `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which
+    are Next.js client-side conventions. Backend should use `SUPABASE_URL` and
+    `SUPABASE_SERVICE_ROLE_KEY` (or at least non-`NEXT_PUBLIC_` names).
 
-## New Chat / Settings
+20. **No TURN server configured** — Only two public STUN servers
+    (`stun.l.google.com:19302`). Will fail across symmetric NATs or restrictive
+    firewalls. Add TURN servers to `DEFAULT_ICE_SERVERS` in
+    `client/src/lib/webrtc/peerConnection.ts`.
 
-24. **Error:** `PATCH /api/users` trusts `userId` and allows updating any user.
-    **Fix:** Authenticate, derive the user ID from the token, and update only the authenticated user. Forward auth headers from the Next proxy.
+21. **In-memory signaling rooms** — `server/src/ws/signaling.js` `rooms` Map is
+    per-process. Won't work across multiple server instances. Add Redis/pubsub
+    adapter for horizontal scaling.
 
-25. **Error:** New-chat user listing is blocked by `users` RLS and returns private emails.
-    **Fix:** Add a public-safe profile view without emails and RLS policies; return only `id`, `username`, `full_name`, and `avatar_url`.
+22. **WebRTC data channel messages not persisted** — Messages sent over the
+    data channel bypass `/api/messages` entirely. They exist only in client
+    memory. Consider mirroring data channel messages to the backend for
+    persistence and history.
 
-26. **Error:** Existing `auth.users` are not backfilled into `public.users`.
-    **Fix:** Add a migration backfill using auth metadata, handling duplicate usernames before adding the unique index.
+### Code Quality / Refactoring
 
-27. **Error:** User search only filters the currently loaded list.
-    **Fix:** Add server-side search with `ilike`, a result limit, and debounced client queries.
+23. **Duplicate browser detection + log helpers** — `getBrowserName()` and
+    `log()` exist identically in `peerConnection.ts` and `signalingClient.ts`.
+    Extract to a shared util (e.g. `client/src/lib/webrtc/logger.ts`).
 
-## Data / Server Infrastructure
+24. **Silent WebSocket message parse errors** — `signalingClient.ts` `ws.onmessage`
+    catches all JSON parse errors and ignores them. At minimum log malformed
+    messages in development.
 
-28. **Error:** `parseBody` references undefined `HttpError`, which can crash on oversized payloads.
-    **Fix:** Add and import the real `HttpError` class; return `413` for oversized bodies.
+25. **`signaling.js` missing ANSWER server logs** — `handleSignaling` logs OFFER
+    and ICE_CANDIDATE receive/forward but not ANSWER. Add for symmetry.
 
-29. **Error:** `new Error(400, "message")` sets the message to `"400"` and loses the real validation message.
-    **Fix:** Replace all invalid error constructions with `HttpError` and return the correct status/message.
+26. **`dataChannel.ts` internal state set to 'failed' on error** — Even though
+    `useWebRTC.ts` ignores it for connection state, `dataChannel.ts` still sets
+    `this.state = 'failed'` on `onerror`. Consider not changing internal state
+    for benign errors.
 
-30. **Error:** Fresh databases lack `conversations`, `conversation_participants`, `messages`, and `connection_requests`.
-    **Fix:** Add migrations for all chat tables, indexes, foreign keys, RLS policies, and Realtime.
+27. **Server env var validation** — `supabase-auth.js` and `supabase.js` throw
+    if env vars missing, but no startup validation for `CLIENT_URL`,
+    `SERVER_URL`, etc.
 
-31. **Error:** CORS is hardcoded to `http://localhost:3000`.
-    **Fix:** Read allowed origins from `CLIENT_URL`/`ALLOWED_ORIGINS` and only reflect allowed origins.
-
-32. **Error:** Legacy auth utility uses `module.exports` in an ESM project and a Supabase v1 `auth.api.setCookie` API.
-    **Fix:** Remove the unused broken utility.
-
-33. **Error:** Cookies are parsed twice via a second `server.on("request")` listener.
-    **Fix:** Parse cookies once before routing and let `getAccessToken` reuse `req.cookies`.
-
-## Verification Checklist
+### Verification Checklist
 
 - Apply `20240103_chat_schema_policies.sql` in Supabase.
 - Set `CLIENT_URL` on the backend and add it to Supabase Auth redirect URLs.
-- Test signup, email confirmation callback, username login, email login, logout, dashboard load, New Chat, Settings, message send, and Realtime.
+- Test signup, email confirmation callback, username login, email login, logout,
+  dashboard load, New Chat, Settings, message send, Realtime, and WebRTC call
+  between two browsers.
 - Run `npm run lint` and `npx tsc --noEmit` in `client/`.
 - Run `node --check` on changed server files.
+- Verify TURN server works for cross-NAT WebRTC connections.

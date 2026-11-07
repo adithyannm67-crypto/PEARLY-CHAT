@@ -27,7 +27,8 @@ function getDateKey(ts: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatDateLabel(dateKey: string): string {
+function formatDateLabel(dateString: string): string {
+  const dateKey= getDateKey(dateString);
   if (!dateKey) return '';
   const [yearStr, monthStr, dayStr] = dateKey.split('-');
   const targetDate = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
@@ -124,7 +125,7 @@ export default function ChatArea() {
 
       try {
         const response = await authFetch(
-          `/api/messages?selectedConversationId=${encodeURIComponent(selectedConversationId!)}`,
+          `/api/messages?conversationId=${encodeURIComponent(selectedConversationId!)}`,
           { cache: 'no-store' }
         );
         const data = await response.json();
@@ -137,6 +138,7 @@ export default function ChatArea() {
           setLocalMessages(data.data?.messages ?? []);
         }
       } catch (err) {
+        console.error(err);
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load messages');
         }
@@ -227,17 +229,11 @@ export default function ChatArea() {
         <div className="flex-1 min-w-0">
           <h2 className="font-medium text-text-primary truncate">{otherUser.name}</h2>
           <p className="text-xs">
-            {onlineUsers.get(otherUser.id) === true && (
+            {onlineUsers.get(otherUser.id) === true ? (
               <span className="text-online font-medium">Online</span>
-            )}
-            {onlineUsers.get(otherUser.id) === false && (
+            ) : (
               <span className="text-text-secondary">
-                {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
-              </span>
-            )}
-            {onlineUsers.get(otherUser.id) === undefined && (
-              <span className="text-text-secondary">
-                {otherUser.lastSeen ? `Last seen ${otherUser.lastSeen}` : 'Offline'}
+                {otherUser.lastSeen ? `Last seen ${formatDateLabel(otherUser.lastSeen)}` : 'Offline'}
               </span>
             )}
           </p>

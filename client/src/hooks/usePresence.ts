@@ -4,10 +4,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { authFetch } from '@/lib/authFetch';
 
-type UserStatus = {
-  id: string;
-  is_online: boolean;
-  last_seen: string | null;
+type UserPresence = {
+  user_id: string;
+  online: boolean;
+  last_seen: string;
 };
 
 interface UsePresenceReturn {
@@ -43,59 +43,113 @@ export function usePresence(userId: string | null): UsePresenceReturn {
   useEffect(() => {
     if (!userId) return;
 
-    // Mark self online on mount.
+    // Mark self online in DB for persistence on mount.
     void setOwnStatus(true);
 
-    // Heartbeat every 30 seconds to keep presence fresh.
+    const channel = supabase.channel('presence:global');
+
+    // Others came online.
+    channel.on(
+      'presence',
+      { event: 'join' },
+      ({ newPresences }) => {
+        setOnlineUsers((prev) => {
+          const next = new Map(prev);
+          if (!newPresences) return next;
+          for (const presences of Object.values(newPresences)) {
+            const presenceList = Array.isArray(presences)
+              ? presences
+              : [presences];
+            for (const presence of presenceList) {
+              const p = presence as unknown as UserPresence;
+              if (p.user_id && p.user_id !== userId) {
+                next.set(p.user_id, true);
+              }
+            }
+          }
+          return next;
+        });
+      }
+    );
+
+    // Others went offline.
+    channel.on(
+      'presence',
+      { event: 'leave' },
+      ({ leftPresences }) => {
+        setOnlineUsers((prev) => {
+          const next = new Map(prev);
+          if (!leftPresences) return next;
+          for (const presences of Object.values(leftPresences)) {
+            const presenceList = Array.isArray(presences)
+              ? presences
+              : [presences];
+            for (const presence of presenceList) {
+              const p = presence as unknown as UserPresence;
+              if (p.user_id) {
+                next.delete(p.user_id);
+              }
+            }
+          }
+          return next;
+        });
+      }
+    );
+
+    // Subscribe and track self in the presence channel.
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        try {
+          await channel.track({
+            user_id: userId,
+            online: true,
+            last_seen: new Date().toISOString(),
+          });
+        } catch {
+          // Ignore track errors on subscribe.
+        }
+      }
+    });
+
+    // Lightweight presence heartbeat via Realtime channel (no REST/DB write).
     const heartbeat = setInterval(() => {
-      void setOwnStatus(true);
+      try {
+        void channel.track({
+          user_id: userId,
+          online: true,
+          last_seen: new Date().toISOString(),
+        });
+      } catch {
+        // Ignore track errors during heartbeat (channel may be closing).
+      }
     }, 30000);
 
-    // Subscribe to user presence changes.
-    const channel = supabase
-      .channel('presence:users')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'users',
-        },
-        (payload) => {
-          const row = payload.new as UserStatus;
-          if (!row.id) return;
-
-          setOnlineUsers((prev) => {
-            const next = new Map(prev);
-            next.set(row.id, Boolean(row.is_online));
-            return next;
-          });
-        }
-      )
-      .subscribe();
-
-    // Mark self offline when tab closes or becomes hidden.
+    // Mark offline on page close.
     const handleBeforeUnload = () => {
-      void setOwnStatus(false);
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        void setOwnStatus(false);
-      } else if (document.visibilityState === 'visible') {
-        void setOwnStatus(true);
+      try {
+        void channel.untrack();
+      } catch {
+        // Ignore untrack errors on unload.
       }
+      void setOwnStatus(false);
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(heartbeat);
+      try {
+        void channel.untrack();
+      } catch {
+        // Ignore untrack errors during cleanup.
+      }
       void setOwnStatus(false);
-      supabase.removeChannel(channel);
+      try {
+        supabase.removeChannel(channel);
+      } catch {
+        // Ignore removeChannel errors during cleanup.
+      }
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [userId, setOwnStatus]);
 

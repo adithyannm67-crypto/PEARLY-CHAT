@@ -31,10 +31,11 @@ export function useDashboardRealtime({
 
     const channel = supabase
       .channel(`dashboard:${userId}`)
+      // New conversation created for this user
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
           schema: "public",
           table: "conversation_participants",
           filter: `user_id=eq.${userId}`,
@@ -43,6 +44,20 @@ export function useDashboardRealtime({
           void loadConversations();
         },
       )
+      // User removed from a conversation
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "conversation_participants",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          void loadConversations();
+        },
+      )
+      // New message in a conversation the user already has loaded
       .on(
         "postgres_changes",
         {
@@ -79,47 +94,68 @@ export function useDashboardRealtime({
           });
         },
       )
+      // Incoming connection request created
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "INSERT",
+          schema: "public",
+          table: "connection_requests",
+          filter: `receiver_id=eq.${userId}`,
+        },
+        () => {
+          void loadConnectionRequests();
+          void loadRequestHistory?.();
+        },
+      )
+      // Outgoing connection request created
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "connection_requests",
+          filter: `sender_id=eq.${userId}`,
+        },
+        () => {
+          void loadSentConnectionRequests();
+          void loadRequestHistory?.();
+        },
+      )
+      // Incoming request status changed (e.g. accepted/rejected)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
           schema: "public",
           table: "connection_requests",
           filter: `receiver_id=eq.${userId}`,
         },
         (payload) => {
-          console.log(`[Realtime:${userId}] Incoming request event:`, payload);
-
-          void loadConnectionRequests();
-          void loadSentConnectionRequests();
-          void loadRequestHistory?.();
+          const row = payload.new as { status?: string };
+          const old = payload.old as { status?: string };
+          if (row.status !== old.status) {
+            void loadConnectionRequests();
+            void loadRequestHistory?.();
+          }
         },
       )
+      // Outgoing request status changed (e.g. accepted/rejected)
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
           schema: "public",
           table: "connection_requests",
           filter: `sender_id=eq.${userId}`,
         },
         (payload) => {
-          console.log(`[Realtime:${userId}] Outgoing request event:`, payload);
-
-          void loadConnectionRequests();
-          void loadSentConnectionRequests();
-          void loadRequestHistory?.();
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "connection_requests",
-        },
-        (payload) => {
-          console.log("🔥 DATABASE EVENT RECEIVED:", payload);
+          const row = payload.new as { status?: string };
+          const old = payload.old as { status?: string };
+          if (row.status !== old.status) {
+            void loadSentConnectionRequests();
+            void loadRequestHistory?.();
+          }
         },
       )
       .subscribe((status, error) => {
