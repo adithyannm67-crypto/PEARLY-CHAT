@@ -801,13 +801,6 @@ export function getPeerConnectionManager(
   return instance;
 }
 
-export function closePeerConnectionManager() {
-  if (instance) {
-    instance.close();
-    instance = null;
-  }
-}
-
 export type {
   PeerConnectionManager,
   PeerConnectionConfig,

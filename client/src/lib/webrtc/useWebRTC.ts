@@ -64,7 +64,6 @@ export function useWebRTC({
   const currentConversationId = useRef<string | null>(null);
   const localUserId = useRef<string | null>(userId);
   const peerUserIdRef = useRef<string | null>(null);
-  const isOffererRef = useRef(false);
   const peerJoinedRef = useRef(false);
   const iceServersRef = useRef<IceServer[]>([]);
 
@@ -164,7 +163,6 @@ export function useWebRTC({
         log('[WS]', null, 'peer left');
 
         peerJoinedRef.current = false;
-        isOffererRef.current = false;
         setConnectionState('disconnected');
         manager?.close();
         channelMgr?.close();
@@ -280,7 +278,6 @@ export function useWebRTC({
     currentConversationId.current = conversationId;
     peerJoinedRef.current = false;
     peerUserIdRef.current = null;
-    isOffererRef.current = false;
     setMessages([]);
     setIsDataChannelOpen(false);
     setConnectionState('connecting');
@@ -321,7 +318,6 @@ export function useWebRTC({
     currentConversationId.current = null;
     peerJoinedRef.current = false;
     peerUserIdRef.current = null;
-    isOffererRef.current = false;
     setMessages([]);
     setIsDataChannelOpen(false);
     setConnectionState('disconnected');

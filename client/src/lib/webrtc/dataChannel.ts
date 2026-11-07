@@ -133,13 +133,6 @@ export function getDataChannelManager(
   return instance;
 }
 
-export function closeDataChannelManager() {
-  if (instance) {
-    instance.close();
-    instance = null;
-  }
-}
-
 export type {
   DataChannelManager,
   DataChannelMessage,

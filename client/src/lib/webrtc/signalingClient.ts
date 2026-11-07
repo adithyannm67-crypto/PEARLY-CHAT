@@ -286,13 +286,6 @@ export function getSignalingClient(handlers?: SignalingHandlers): SignalingClien
   return clientInstance;
 }
 
-export function closeSignalingClient() {
-  if (clientInstance) {
-    clientInstance.disconnect();
-    clientInstance = null;
-  }
-}
-
 export type {
   SignalingClient,
   SignalingHandlers,
