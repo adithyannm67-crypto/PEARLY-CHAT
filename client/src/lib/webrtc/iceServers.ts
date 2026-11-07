@@ -6,14 +6,18 @@ const DEFAULT_ICE_SERVERS: IceServer[] = [
 ];
 
 function parseStunServers(): IceServer[] {
-  const raw = process.env.NEXT_PUBLIC_STUN_URLS;
-  if (!raw) return DEFAULT_ICE_SERVERS;
+  const servers: IceServer[] = [];
 
-  return raw
-    .split(",")
-    .map((url) => url.trim())
-    .filter(Boolean)
-    .map((url) => ({ urls: url }));
+  for (let i = 1; i <= 5; i++) {
+    const url = (process.env as Record<string, string | undefined>)[
+      `NEXT_PUBLIC_STUN_URL_${i}`
+    ];
+    if (url && url.trim()) {
+      servers.push({ urls: url.trim() });
+    }
+  }
+
+  return servers.length > 0 ? servers : DEFAULT_ICE_SERVERS;
 }
 
 function buildIceServers(): IceServer[] {

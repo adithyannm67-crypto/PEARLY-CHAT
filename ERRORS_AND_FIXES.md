@@ -159,10 +159,10 @@ change events are delivered for Realtime subscriptions.
     call fails. `ChatArea.tsx` `handleSend` awaits the async `sendMessage`.
 
 25. **STUN/TURN server config moved to env** — `iceServers.ts` reads STUN
-    servers from `NEXT_PUBLIC_STUN_URLS` (comma-separated, falls back to Google's
-    public STUN servers) and TURN from `NEXT_PUBLIC_TURN_URL` /
-    `NEXT_PUBLIC_TURN_USERNAME` / `NEXT_PUBLIC_TURN_CREDENTIAL`. Documented in
-    `client/.env.example`.
+    servers from `NEXT_PUBLIC_STUN_URL_1` … `NEXT_PUBLIC_STUN_URL_5` env vars
+    (falls back to Google's public STUN servers if none set) and TURN from
+    `NEXT_PUBLIC_TURN_URL` / `NEXT_PUBLIC_TURN_USERNAME` /
+    `NEXT_PUBLIC_TURN_CREDENTIAL`. Documented in `client/.env.example`.
 
 ## Required for Deployment
 
