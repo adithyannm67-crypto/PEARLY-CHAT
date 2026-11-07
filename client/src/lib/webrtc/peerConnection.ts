@@ -97,13 +97,7 @@ class PeerConnectionManager {
     };
 
     pc.onicecandidateerror = (event) => {
-      console.warn("[webrtc] ICE error:", {
-        url: event.url,
-        errorCode: event.errorCode,
-        errorText: event.errorText,
-        address: event.address,
-        port: event.port,
-      });
+      console.warn("[webrtc] ICE server error:", event);
       // Individual ICE server failures are logged as warnings only.
       // The peer connection is NOT closed or restarted here — WebRTC will
       // continue gathering candidates from other configured ICE servers.
