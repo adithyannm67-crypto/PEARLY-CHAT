@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase/client';
 import { SERVER_URL } from '@/lib/serverProxy';
+import { log } from './logger';
 
 type SignalingEvent =
   | { type: 'AUTHENTICATED'; userId: string }
@@ -17,21 +18,6 @@ type SignalingEvent =
       sdpMLineIndex?: number;
     }
   | { type: 'ERROR'; code: string; message: string };
-
-function getBrowserName(): string {
-  const ua = navigator.userAgent;
-  if (ua.includes('Firefox')) return 'Firefox';
-  if (ua.includes('Edg/')) return 'Edge';
-  if (ua.includes('Chrome')) return 'Chrome';
-  if (ua.includes('Safari')) return 'Safari';
-  return 'Unknown';
-}
-
-function log(prefix: string, convId: string | null, message: string, data?: unknown) {
-  const conv = convId ?? '-';
-  const payload = data !== undefined ? ` ${JSON.stringify(data)}` : '';
-  console.log(`[${prefix}] ${getBrowserName()} conv=${conv} ${new Date().toISOString()} ${message}${payload}`);
-}
 
 type SignalingHandlers = {
   onAuthenticated?: (userId: string) => void;
@@ -135,7 +121,7 @@ class SignalingClient {
             }
             this.handleMessage(message);
           } catch {
-            // ignore malformed messages
+            console.log('[signaling] malformed WebSocket message:', event.data?.slice(0, 200));
           }
         };
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSupabase } from '@/context/AuthProvider';
+import { authFetch } from '@/lib/authFetch';
 import { getSignalingClient } from './signalingClient';
 import {
   getPeerConnectionManager,
@@ -30,7 +31,7 @@ type UseWebRTCReturn = {
   messages: DataChannelMessage[];
   connect: () => Promise<void>;
   disconnect: () => void;
-  sendMessage: (content: string) => boolean;
+  sendMessage: (content: string) => Promise<boolean>;
   peerConnectionState: PeerConnectionState;
 };
 
@@ -309,22 +310,40 @@ export function useWebRTC({
   }, []);
 
   const sendMessage = useCallback(
-    (content: string): boolean => {
-      if (!userId) return false;
+    async (content: string): Promise<boolean> => {
+      if (!userId || !currentConversationId.current) return false;
       const sent = dataChannelRef.current?.send(content, userId);
       if (sent) {
+        const optimistic: DataChannelMessage = {
+          type: 'text',
+          id: crypto.randomUUID(),
+          content,
+          timestamp: new Date().toISOString(),
+          senderId: userId,
+        };
         setMessages((prev) => {
-          const optimistic: DataChannelMessage = {
-            type: 'text',
-            id: crypto.randomUUID(),
-            content,
-            timestamp: new Date().toISOString(),
-            senderId: userId,
-          };
+          const exists = prev.some((m) => m.id === optimistic.id);
+          if (exists) return prev;
           return [...prev, optimistic];
         });
+
+        // Persist to backend for history across refreshes
+        try {
+          await authFetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId: currentConversationId.current,
+              content,
+            }),
+          });
+        } catch {
+          // Persistence is best-effort; message still sent via data channel.
+        }
+
+        return true;
       }
-      return sent ?? false;
+      return false;
     },
     [userId],
   );

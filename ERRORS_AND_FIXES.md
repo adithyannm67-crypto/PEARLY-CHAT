@@ -125,52 +125,61 @@ change events are delivered for Realtime subscriptions.
 18. **Logout** — Revokes Supabase session via `createUserClient` + `signOut()`,
     clears `access_token`, `refresh_token`, and `sb-*` cookies.
 
-## Remaining Issues
+### Quick error / UX fixes (errors-and-fixes branch)
 
-### Critical
+19. **ANSWER server logging added** — `server/src/ws/signaling.js` now logs
+    `[SERVER-OFFER]` for ANSWER receive and forward (previously only OFFER and
+    ICE_CANDIDATE were logged).
 
-19. **Server reads `NEXT_PUBLIC_*` env vars** — `server/src/config/supabase.js`
-    reads `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which
-    are Next.js client-side conventions. Backend should use `SUPABASE_URL` and
-    `SUPABASE_SERVICE_ROLE_KEY` (or at least non-`NEXT_PUBLIC_` names).
+20. **Malformed WebSocket messages logged** —
+    `client/src/lib/webrtc/signalingClient.ts` `ws.onmessage` now logs malformed
+    JSON instead of silently ignoring parse errors.
 
-20. **No TURN server configured** — Only two public STUN servers
-    (`stun.l.google.com:19302`). Will fail across symmetric NATs or restrictive
-    firewalls. Add TURN servers to `DEFAULT_ICE_SERVERS` in
-    `client/src/lib/webrtc/peerConnection.ts`.
+21. **Data channel internal state fix** —
+    `client/src/lib/webrtc/dataChannel.ts` no longer sets
+    `this.state = 'failed'` on benign `onerror` during disconnect; only calls
+    `onError` handler.
 
-21. **In-memory signaling rooms** — `server/src/ws/signaling.js` `rooms` Map is
-    per-process. Won't work across multiple server instances. Add Redis/pubsub
-    adapter for horizontal scaling.
+22. **Shared logger extracted** —
+    `client/src/lib/webrtc/logger.ts` created with `getBrowserName()` and
+    `log()`; imported by `peerConnection.ts` and `signalingClient.ts`, removing
+    duplicated function bodies.
 
-22. **WebRTC data channel messages not persisted** — Messages sent over the
-    data channel bypass `/api/messages` entirely. They exist only in client
-    memory. Consider mirroring data channel messages to the backend for
-    persistence and history.
+23. **Server env var names fixed** — `server/src/config/supabase.js`,
+    `server/src/config/supabase-auth.js`, and
+    `server/src/api/auth/logout/route.js` now read `SUPABASE_URL` and
+    `SUPABASE_ANON_KEY` instead of the Next.js client-side convention
+    `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `.env` already
+    defines both names.
 
-### Code Quality / Refactoring
+24. **WebRTC data channel messages persisted** — `useWebRTC.ts` `sendMessage`
+    now POSTs to `/api/messages` via `authFetch` after sending via the data
+    channel, so chat history persists across page refreshes. Persistence is
+    best-effort; the message is still sent via the data channel even if the API
+    call fails. `ChatArea.tsx` `handleSend` awaits the async `sendMessage`.
 
-23. **Duplicate browser detection + log helpers** — `getBrowserName()` and
-    `log()` exist identically in `peerConnection.ts` and `signalingClient.ts`.
-    Extract to a shared util (e.g. `client/src/lib/webrtc/logger.ts`).
+## Required for Deployment
 
-24. **Silent WebSocket message parse errors** — `signalingClient.ts` `ws.onmessage`
-    catches all JSON parse errors and ignores them. At minimum log malformed
-    messages in development.
+The following must be resolved before deploying to production. Without them,
+the app will not work reliably for real users across different networks.
 
-25. **`signaling.js` missing ANSWER server logs** — `handleSignaling` logs OFFER
-    and ICE_CANDIDATE receive/forward but not ANSWER. Add for symmetry.
+1. **TURN server configured** — Only two public STUN servers
+   (`stun.l.google.com:19302`) are in `DEFAULT_ICE_SERVERS`. WebRTC will fail
+   across symmetric NATs, cellular networks, or restrictive firewalls. Add TURN
+   servers (e.g. Coturn, Twilio, Xirsys) with `username` and `credential` to
+   `DEFAULT_ICE_SERVERS` in `client/src/lib/webrtc/peerConnection.ts`.
 
-26. **`dataChannel.ts` internal state set to 'failed' on error** — Even though
-    `useWebRTC.ts` ignores it for connection state, `dataChannel.ts` still sets
-    `this.state = 'failed'` on `onerror`. Consider not changing internal state
-    for benign errors.
+2. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
+   Map is per-process. Works fine on a single server instance, but will break
+   if you run multiple replicas (e.g. on Railway, Fly, Render, or Kubernetes).
+   Add Redis/pubsub adapter or document single-instance-only deployment.
 
-27. **Server env var validation** — `supabase-auth.js` and `supabase.js` throw
-    if env vars missing, but no startup validation for `CLIENT_URL`,
-    `SERVER_URL`, etc.
+## Optional / Refactoring / Nice-to-Have
 
-### Verification Checklist
+3. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
+   to `logger.ts`; verify no other files re-implement the same helper.
+
+## Verification Checklist
 
 - Apply `20240103_chat_schema_policies.sql` in Supabase.
 - Set `CLIENT_URL` on the backend and add it to Supabase Auth redirect URLs.
@@ -180,3 +189,5 @@ change events are delivered for Realtime subscriptions.
 - Run `npm run lint` and `npx tsc --noEmit` in `client/`.
 - Run `node --check` on changed server files.
 - Verify TURN server works for cross-NAT WebRTC connections.
+- Verify chat history persists across page refreshes.
+- Verify WebRTC connection works on cellular / different networks (TURN).

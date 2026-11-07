@@ -51,7 +51,6 @@ class DataChannelManager {
         return;
       }
       console.log('[dataChannel] error:', err);
-      this.state = 'failed';
       this.handlers.onError?.('DATA_CHANNEL_ERROR');
     };
 
