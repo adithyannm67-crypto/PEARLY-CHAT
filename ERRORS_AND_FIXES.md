@@ -125,58 +125,67 @@ change events are delivered for Realtime subscriptions.
 18. **Logout** — Revokes Supabase session via `createUserClient` + `signOut()`,
     clears `access_token`, `refresh_token`, and `sb-*` cookies.
 
-## Remaining Issues
+### Quick error / UX fixes (errors-and-fixes branch)
 
-### Critical
-
-19. **No TURN server configured** — Only two public STUN servers
-    (`stun.l.google.com:19302`). Will fail across symmetric NATs or restrictive
-    firewalls. Add TURN servers to `DEFAULT_ICE_SERVERS` in
-    `client/src/lib/webrtc/peerConnection.ts`.
-
-20. **In-memory signaling rooms** — `server/src/ws/signaling.js` `rooms` Map is
-    per-process. Won't work across multiple server instances. Add Redis/pubsub
-    adapter for horizontal scaling.
-
-21. **WebRTC data channel messages not persisted** — Messages sent over the
-    data channel bypass `/api/messages` entirely. They exist only in client
-    memory. Consider mirroring data channel messages to the backend for
-    persistence and history.
-
-22. **Server env var validation** — `supabase-auth.js` and `supabase.js` throw
-    if env vars missing, but no startup validation for `CLIENT_URL`,
-    `SERVER_URL`, etc.
-
-## Completed Fixes (errors-and-fixes branch)
-
-### Quick error / UX fixes
-
-23. **ANSWER server logging added** — `server/src/ws/signaling.js` now logs
+19. **ANSWER server logging added** — `server/src/ws/signaling.js` now logs
     `[SERVER-OFFER]` for ANSWER receive and forward (previously only OFFER and
     ICE_CANDIDATE were logged).
 
-24. **Malformed WebSocket messages logged** —
+20. **Malformed WebSocket messages logged** —
     `client/src/lib/webrtc/signalingClient.ts` `ws.onmessage` now logs malformed
     JSON instead of silently ignoring parse errors.
 
-25. **Data channel internal state fix** —
+21. **Data channel internal state fix** —
     `client/src/lib/webrtc/dataChannel.ts` no longer sets
     `this.state = 'failed'` on benign `onerror` during disconnect; only calls
     `onError` handler.
 
-26. **Shared logger extracted** —
+22. **Shared logger extracted** —
     `client/src/lib/webrtc/logger.ts` created with `getBrowserName()` and
     `log()`; imported by `peerConnection.ts` and `signalingClient.ts`, removing
     duplicated function bodies.
 
-27. **Server env var names fixed** — `server/src/config/supabase.js`,
+23. **Server env var names fixed** — `server/src/config/supabase.js`,
     `server/src/config/supabase-auth.js`, and
     `server/src/api/auth/logout/route.js` now read `SUPABASE_URL` and
     `SUPABASE_ANON_KEY` instead of the Next.js client-side convention
     `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`. `.env` already
     defines both names.
 
-### Verification Checklist
+## Required for Deployment
+
+The following must be resolved before deploying to production. Without them,
+the app will not work reliably for real users across different networks.
+
+1. **TURN server configured** — Only two public STUN servers
+   (`stun.l.google.com:19302`) are in `DEFAULT_ICE_SERVERS`. WebRTC will fail
+   across symmetric NATs, cellular networks, or restrictive firewalls. Add TURN
+   servers (e.g. Coturn, Twilio, Xirsys) with `username` and `credential` to
+   `DEFAULT_ICE_SERVERS` in `client/src/lib/webrtc/peerConnection.ts`.
+
+2. **WebRTC data channel messages persisted** — Messages sent over the WebRTC
+   data channel bypass `/api/messages` entirely and exist only in client
+   memory. Chat history is lost on page refresh and not visible to the other
+   peer unless they are online at the same time. Mirror data channel messages
+   to `/api/messages` via `authFetch` so they are stored in Supabase and
+   retrievable via `GET /api/messages`.
+
+3. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
+   Map is per-process. Works fine on a single server instance, but will break
+   if you run multiple replicas (e.g. on Railway, Fly, Render, or Kubernetes).
+   Add Redis/pubsub adapter or document single-instance-only deployment.
+
+## Optional / Refactoring / Nice-to-Have
+
+4. **Server env var validation** — `supabase-auth.js` and `supabase.js` throw
+   if `SUPABASE_URL`/`SUPABASE_ANON_KEY` are missing, but there is no startup
+   validation for `CLIENT_URL`, `SERVER_URL`, etc. Add a startup check that
+   fails fast with clear messages instead of cryptic runtime crashes.
+
+5. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
+   to `logger.ts`; verify no other files re-implement the same helper.
+
+## Verification Checklist
 
 - Apply `20240103_chat_schema_policies.sql` in Supabase.
 - Set `CLIENT_URL` on the backend and add it to Supabase Auth redirect URLs.
@@ -186,3 +195,5 @@ change events are delivered for Realtime subscriptions.
 - Run `npm run lint` and `npx tsc --noEmit` in `client/`.
 - Run `node --check` on changed server files.
 - Verify TURN server works for cross-NAT WebRTC connections.
+- Verify chat history persists across page refreshes.
+- Verify WebRTC connection works on cellular / different networks (TURN).
