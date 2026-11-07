@@ -39,14 +39,6 @@ export default async function handler(req, res) {
   });
 
   if (error || !data.session) {
-    // Email not confirmed is safe to reveal - Supabase only returns this
-    // when the email exists but hasn't been verified yet
-    if (error?.code === "email_not_confirmed") {
-      throw new HttpError(
-        401,
-        "Please confirm your email address before signing in. Check your inbox for a confirmation link.",
-      );
-    }
     throw new HttpError(401, "Invalid username or password");
   }
 
