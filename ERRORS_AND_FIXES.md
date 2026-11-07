@@ -176,12 +176,7 @@ the app will not work reliably for real users across different networks.
 
 ## Optional / Refactoring / Nice-to-Have
 
-3. **Server env var validation** — `supabase-auth.js` and `supabase.js` throw
-   if `SUPABASE_URL`/`SUPABASE_ANON_KEY` are missing, but there is no startup
-   validation for `CLIENT_URL`, `SERVER_URL`, etc. Add a startup check that
-   fails fast with clear messages instead of cryptic runtime crashes.
-
-4. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
+3. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
    to `logger.ts`; verify no other files re-implement the same helper.
 
 ## Verification Checklist

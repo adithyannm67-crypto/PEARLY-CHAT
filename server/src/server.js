@@ -1,5 +1,5 @@
 import http from "http";
-import dotenv from "dotenv";
+import { env } from "./config/env.js";
 import { WebSocketServer } from "ws";
 import { setupSignaling } from "./ws/signaling.js";
 import signinHandler from "./api/auth/signin/route.js";
@@ -13,9 +13,8 @@ import usersHandler from "./api/users/route.js";
 import * as responseHandler from "#utils/responseHandler.js";
 import handlePreflight from "#utils/handlePreflight.js";
 import parseCookies from "#utils/parseCookies.js";
-dotenv.config();
 
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = env.NODE_ENV === "production";
 
 const server = http.createServer(async (req, res) => {
   if (handlePreflight(req, res)) return;
