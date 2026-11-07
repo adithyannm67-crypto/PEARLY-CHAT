@@ -17,6 +17,7 @@ import { usePresence } from '@/hooks/usePresence';
 import { useConversations } from '@/hooks/useConversations';
 import { useConnectionRequests } from '@/hooks/useConnectionRequests';
 import { useSentConnectionRequests } from '@/hooks/useSentConnectionRequests';
+import { useWebRTC } from '@/lib/webrtc/useWebRTC';
 import getInitials from '@/lib/utils/getInitials';
 
 interface DashboardContextValue {
@@ -167,6 +168,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [historyTab, setHistoryTab] = useState<'received' | 'sent'>('received');
   const [activeModal, setActiveModal] = useState<'new-chat' | 'settings' | null>(null);
 
+  const { connect: connectWebRTC, disconnect: disconnectWebRTC } = useWebRTC({
+    conversationId: selectedConversationId,
+    userId,
+  });
+
   useEffect(() => {
     if (!authLoading && !userId) {
       router.replace('/auth/login');
@@ -183,6 +189,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   };
 
   const handleLogout = async () => {
+    // Close WebRTC connection and reset chat state on logout
+    disconnectWebRTC();
+    setSelectedConversationId(null);
+    setShowChat(false);
     await signOut();
     router.push('/auth/login');
   };
