@@ -158,26 +158,25 @@ change events are delivered for Realtime subscriptions.
     best-effort; the message is still sent via the data channel even if the API
     call fails. `ChatArea.tsx` `handleSend` awaits the async `sendMessage`.
 
+25. **STUN/TURN server config via backend API** — `server/src/api/ice-config/route.js`
+    provides GET /api/ice-config endpoint that returns STUN servers from backend config
+    plus optional temporary TURN credentials via Twilio SDK (optional). Frontend fetches
+    ICE config via authFetch. No Twilio credentials exposed to frontend.
+    Documented in `client/.env.example`.
+
 ## Required for Deployment
 
 The following must be resolved before deploying to production. Without them,
 the app will not work reliably for real users across different networks.
 
-1. **TURN server configured** — Only two public STUN servers
-   (`stun.l.google.com:19302`) are in `DEFAULT_ICE_SERVERS`. WebRTC will fail
-   across symmetric NATs, cellular networks, or restrictive firewalls. Add TURN
-   servers (e.g. Coturn, Twilio, Xirsys) with `username` and `credential` to
-   `DEFAULT_ICE_SERVERS` in `client/src/lib/webrtc/peerConnection.ts`.
-
-2. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
+1. **In-memory signaling rooms scaled** — `server/src/ws/signaling.js` `rooms`
    Map is per-process. Works fine on a single server instance, but will break
    if you run multiple replicas (e.g. on Railway, Fly, Render, or Kubernetes).
    Add Redis/pubsub adapter or document single-instance-only deployment.
 
 ## Optional / Refactoring / Nice-to-Have
 
-3. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
-   to `logger.ts`; verify no other files re-implement the same helper.
+None remaining — all optional items completed.
 
 ## Verification Checklist
 

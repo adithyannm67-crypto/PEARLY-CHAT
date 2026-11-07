@@ -1,3 +1,5 @@
+import { log } from './logger';
+
 type DataChannelMessage = {
   type: 'text';
   id: string;
@@ -50,7 +52,7 @@ class DataChannelManager {
       if (this.isClosing || !this.channel) {
         return;
       }
-      console.log('[dataChannel] error:', err);
+      log('[dataChannel]', null, 'error', err);
       this.handlers.onError?.('DATA_CHANNEL_ERROR');
     };
 

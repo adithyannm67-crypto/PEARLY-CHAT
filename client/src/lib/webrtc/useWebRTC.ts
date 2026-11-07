@@ -10,6 +10,9 @@ import {
   getDataChannelManager,
   type DataChannelMessage,
 } from './dataChannel';
+import { fetchIceServers } from './iceServers';
+import type { IceServer } from './iceServers';
+import { log } from './logger';
 
 type ConnectionStatus =
   | 'disconnected'
@@ -63,6 +66,7 @@ export function useWebRTC({
   const peerUserIdRef = useRef<string | null>(null);
   const isOffererRef = useRef(false);
   const peerJoinedRef = useRef(false);
+  const iceServersRef = useRef<IceServer[]>([]);
 
   const addMessage = useCallback((message: DataChannelMessage) => {
     setMessages((prev) => {
@@ -83,16 +87,15 @@ export function useWebRTC({
 
     client.setHandlers({
       onAuthenticated: (userId) => {
-        console.log(
-          '[WS] authenticated',
-          { userId },
-        );
+        log('[WS]', null, 'authenticated', { userId });
         // Room joining is handled explicitly in connect(), not here.
         // This prevents duplicate JOIN_ROOM messages.
       },
       onRoomJoined: (_conversationId, participantCount, participantIds) => {
-        console.log(
-          '[WS] room joined',
+        log(
+          '[WS]',
+          _conversationId,
+          'room joined',
           {
             conversationId: _conversationId,
             participantCount,
@@ -112,10 +115,13 @@ export function useWebRTC({
             localUserId.current!,
             otherUserId,
             _conversationId,
+            iceServersRef.current,
           );
         } else {
-          console.log(
-            '[WS] room joined but no other participant found',
+          log(
+            '[WS]',
+            _conversationId,
+            'room joined but no other participant found',
             { conversationId: _conversationId, participantIds },
           );
         }
@@ -125,16 +131,27 @@ export function useWebRTC({
         );
       },
       onPeerJoined: (_conversationId, peerUserId) => {
-        console.log(
-          '[WS] peer joined',
-          { conversationId: _conversationId, peerUserId, localUserId: localUserId.current },
+        log(
+          '[WS]',
+          _conversationId,
+          'peer joined',
+          {
+            conversationId: _conversationId,
+            peerUserId,
+            localUserId: localUserId.current,
+          },
         );
 
         peerJoinedRef.current = true;
         peerUserIdRef.current = peerUserId;
 
         if (localUserId.current && peerUserId) {
-          void manager.init(localUserId.current, peerUserId, _conversationId);
+          void manager.init(
+            localUserId.current,
+            peerUserId,
+            _conversationId,
+            iceServersRef.current,
+          );
         }
 
         setConnectionState('negotiating');
@@ -144,7 +161,7 @@ export function useWebRTC({
         // Both peers independently decide polite/impolite roles via manager.init().
       },
       onPeerLeft: () => {
-        console.log('[WS] peer left');
+        log('[WS]', null, 'peer left');
 
         peerJoinedRef.current = false;
         isOffererRef.current = false;
@@ -153,16 +170,20 @@ export function useWebRTC({
         channelMgr?.close();
       },
       onOffer: async (_senderId, _conversationId, sdp) => {
-        console.log(
-          '[WS] offer received',
+        log(
+          '[WS]',
+          _conversationId,
+          'offer received',
           { conversationId: _conversationId, senderId: _senderId, sdpLength: sdp?.length },
         );
         if (!manager) return;
         await manager.handleOffer(_conversationId, sdp);
       },
       onAnswer: async (_senderId, _conversationId, sdp) => {
-        console.log(
-          '[WS] answer received',
+        log(
+          '[WS]',
+          _conversationId,
+          'answer received',
           { conversationId: _conversationId, senderId: _senderId, sdpLength: sdp?.length },
         );
         if (!manager) return;
@@ -184,7 +205,7 @@ export function useWebRTC({
         );
       },
       onError: (code, message) => {
-        console.error('[webrtc] signaling error:', code, message);
+        log('[webrtc]', null, 'signaling error', { code, message });
         setConnectionState('failed');
       },
       onConnect: () => {
@@ -210,7 +231,7 @@ export function useWebRTC({
         channelMgr?.attach(channel);
       },
       onError: (error) => {
-        console.error('[webrtc] peer connection error:', error);
+        log('[webrtc]', null, 'peer connection error', error);
         setConnectionState('failed');
       },
     });
@@ -233,7 +254,7 @@ export function useWebRTC({
         if (dataChannelRef.current?.getState() === 'closed') return;
         // Log but don't tear down the connection — data channel errors
         // can be transient or occur during intentional disconnect.
-        console.log('[webrtc] data channel error:', error);
+        log('[webrtc]', null, 'data channel error', error);
       },
     });
 
@@ -278,6 +299,10 @@ export function useWebRTC({
 
       await client.connect(token);
       await client.authenticate(token);
+
+      // Fetch ICE server configuration from backend (includes temporary TURN credentials)
+      const iceServers = await fetchIceServers();
+      iceServersRef.current = iceServers;
 
       // Join the room exactly once after authentication succeeds.
       client.joinRoom(conversationId);

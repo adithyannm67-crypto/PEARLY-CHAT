@@ -1,7 +1,7 @@
 import { getSignalingClient } from "./signalingClient";
 import { log } from "./logger";
-
-type IceServer = { urls: string; username?: string; credential?: string };
+import { fetchIceServers } from "./iceServers";
+import type { IceServer } from "./iceServers";
 
 type RTCIceInitLocal = {
   candidate?: string | null;
@@ -27,11 +27,6 @@ type PeerConnectionHandlers = {
   onError?: (error: string) => void;
 };
 
-const DEFAULT_ICE_SERVERS: IceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-];
-
 class PeerConnectionManager {
   private pc: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
@@ -43,6 +38,9 @@ class PeerConnectionManager {
   private makingOffer = false;
   private ignoreOffer = false;
   private isSettingRemoteAnswerPending = false;
+
+  // ICE restart state
+  private isRestartingIce = false;
 
   private handlers: PeerConnectionHandlers = {};
   private state: PeerConnectionState = "new";
@@ -58,7 +56,7 @@ class PeerConnectionManager {
   ) {
     this.handlers = handlers;
     this.config = {
-      iceServers: config.iceServers ?? DEFAULT_ICE_SERVERS,
+      iceServers: config.iceServers ?? [],
       iceTransportPolicy: "all",
     };
   }
@@ -84,8 +82,11 @@ class PeerConnectionManager {
     this.handlers.onStateChange?.(state);
   }
 
-  private createPeerConnection(): RTCPeerConnection {
-    const pc = new RTCPeerConnection(this.config);
+  private createPeerConnection(iceServers: IceServer[]): RTCPeerConnection {
+    const pc = new RTCPeerConnection({
+      iceServers,
+      iceTransportPolicy: "all",
+    });
 
     pc.onicegatheringstatechange = () => {
       log(
@@ -96,7 +97,10 @@ class PeerConnectionManager {
     };
 
     pc.onicecandidateerror = (event) => {
-      console.error("[webrtc] ICE candidate error:", event);
+      console.warn("[webrtc] ICE server error:", event);
+      // Individual ICE server failures are logged as warnings only.
+      // The peer connection is NOT closed or restarted here — WebRTC will
+      // continue gathering candidates from other configured ICE servers.
     };
 
     pc.oniceconnectionstatechange = () => {
@@ -110,6 +114,8 @@ class PeerConnectionManager {
           this.setState("new");
           break;
         case "checking":
+          this.setState("connecting");
+          break;
         case "connected":
           this.setState("connected");
           break;
@@ -118,10 +124,15 @@ class PeerConnectionManager {
           break;
         case "disconnected":
           this.setState("disconnected");
+          // Disconnected state is temporary — allow ICE to recover naturally.
+          // Do not trigger ICE restart here; wait for 'failed' if recovery does not occur.
           break;
         case "failed":
           this.setState("failed");
-          this.handlers.onError?.("ICE_CONNECTION_FAILED");
+          // Only trigger ICE restart when ICE has fully failed (no viable candidate pair).
+          // Individual candidate errors (e.g. error 701) are handled separately via onicecandidateerror
+          // and do not trigger this path.
+          void this.restartIce();
           break;
         case "closed":
           this.setState("closed");
@@ -144,20 +155,45 @@ class PeerConnectionManager {
       }
     };
 
+    pc.onconnectionstatechange = () => {
+      log(
+        "[CONNECTION]",
+        this.conversationId,
+        `connectionState=${pc.connectionState}`,
+      );
+      switch (pc.connectionState) {
+        case "connecting":
+          this.setState("connecting");
+          break;
+        case "connected":
+          this.setState("connected");
+          break;
+        case "disconnected":
+          this.setState("disconnected");
+          // Disconnected is temporary — allow ICE recovery without restart.
+          break;
+        case "failed":
+          this.setState("failed");
+          this.handlers.onError?.("PEER_CONNECTION_FAILED");
+          break;
+        case "closed":
+          this.setState("closed");
+          break;
+        default:
+          this.setState("connecting");
+      }
+    };
+
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        const candidateType = event.candidate.candidate.split(" ")[0] ?? "unknown";
-        log(
-          "[ICE-GATHERING]",
-          this.conversationId,
-          "onicecandidate fired",
-          {
-            candidate: event.candidate.candidate.slice(0, 80),
-            type: candidateType,
-            sdpMid: event.candidate.sdpMid,
-            sdpMLineIndex: event.candidate.sdpMLineIndex,
-          },
-        );
+        const candidateType =
+          event.candidate.candidate.split(" ")[0] ?? "unknown";
+        log("[ICE-GATHERING]", this.conversationId, "onicecandidate fired", {
+          candidate: event.candidate.candidate.slice(0, 80),
+          type: candidateType,
+          sdpMid: event.candidate.sdpMid,
+          sdpMLineIndex: event.candidate.sdpMLineIndex,
+        });
         const candidate: RTCIceInitLocal = {
           candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid,
@@ -194,6 +230,7 @@ class PeerConnectionManager {
     localUserId: string,
     peerUserId: string,
     conversationId: string,
+    iceServers?: IceServer[],
   ): Promise<void> {
     this.localUserId = localUserId;
     this.peerUserId = peerUserId;
@@ -208,7 +245,8 @@ class PeerConnectionManager {
     );
 
     if (!this.pc) {
-      this.pc = this.createPeerConnection();
+      const resolvedIceServers = iceServers ?? (await fetchIceServers());
+      this.pc = this.createPeerConnection(resolvedIceServers);
 
       // Set up onnegotiationneeded BEFORE creating data channel so the handler is registered
       // when createDataChannel triggers it.
@@ -301,20 +339,14 @@ class PeerConnectionManager {
     }
 
     this.makingOffer = true;
-    log(
-      "[NEGOTIATE]",
-      this.conversationId,
-      "makingOffer=true, creating offer",
-    );
+    log("[NEGOTIATE]", this.conversationId, "makingOffer=true, creating offer");
 
     try {
       const offer = await this.pc.createOffer();
-      log(
-        "[OFFER-SEND]",
-        this.conversationId,
-        "createOffer completed",
-        { type: offer.type, sdpLength: offer.sdp?.length },
-      );
+      log("[OFFER-SEND]", this.conversationId, "createOffer completed", {
+        type: offer.type,
+        sdpLength: offer.sdp?.length,
+      });
       await this.pc.setLocalDescription(offer);
       log(
         "[OFFER-SEND]",
@@ -330,19 +362,12 @@ class PeerConnectionManager {
 
       await this.sendOfferViaSignaling(offerSdp);
     } catch (err) {
-      log(
-        "[NEGOTIATE]",
-        this.conversationId,
-        "negotiate failed",
-        { error: err instanceof Error ? err.message : String(err) },
-      );
+      log("[NEGOTIATE]", this.conversationId, "negotiate failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       this.makingOffer = false;
-      log(
-        "[NEGOTIATE]",
-        this.conversationId,
-        "makingOffer=false",
-      );
+      log("[NEGOTIATE]", this.conversationId, "makingOffer=false");
     }
   }
 
@@ -351,16 +376,14 @@ class PeerConnectionManager {
    * Implements Perfect Negotiation collision handling.
    */
   async handleOffer(conversationId: string, sdp: string): Promise<void> {
-    log(
-      "[EDGE-OFFER]",
-      conversationId,
-      "handleOffer called",
-      { sdpLength: sdp?.length },
-    );
+    log("[EDGE-OFFER]", conversationId, "handleOffer called", {
+      sdpLength: sdp?.length,
+    });
 
     if (!this.pc) {
       log("[EDGE-OFFER]", conversationId, "no peer connection, creating one");
-      this.pc = this.createPeerConnection();
+      const offerIceServers = await fetchIceServers();
+      this.pc = this.createPeerConnection(offerIceServers);
       this.pc.onnegotiationneeded = async () => {
         await this.negotiate();
       };
@@ -393,30 +416,22 @@ class PeerConnectionManager {
 
     await this.pc.setRemoteDescription({ type: "offer", sdp });
     this.remoteDescriptionSet = true;
-    log(
-      "[EDGE-OFFER]",
-      conversationId,
-      "setRemoteDescription completed",
-      { remoteDescriptionSet: this.remoteDescriptionSet },
-    );
+    log("[EDGE-OFFER]", conversationId, "setRemoteDescription completed", {
+      remoteDescriptionSet: this.remoteDescriptionSet,
+    });
 
     // Flush queued ICE candidates now that remote description is set
     await this.flushIceCandidatesToPC();
 
     const answer = await this.pc.createAnswer();
-    log(
-      "[ANSWER]",
-      conversationId,
-      "createAnswer completed",
-      { type: answer.type, sdpLength: answer.sdp?.length },
-    );
+    log("[ANSWER]", conversationId, "createAnswer completed", {
+      type: answer.type,
+      sdpLength: answer.sdp?.length,
+    });
     await this.pc.setLocalDescription(answer);
-    log(
-      "[ANSWER]",
-      conversationId,
-      "setLocalDescription(answer) completed",
-      { localDescriptionSdp: !!this.pc.localDescription?.sdp },
-    );
+    log("[ANSWER]", conversationId, "setLocalDescription(answer) completed", {
+      localDescriptionSdp: !!this.pc.localDescription?.sdp,
+    });
 
     const answerSdp = this.pc.localDescription?.sdp;
     if (!answerSdp) {
@@ -431,12 +446,9 @@ class PeerConnectionManager {
    * Implements rollback for offer collisions.
    */
   async handleAnswer(conversationId: string, sdp: string): Promise<void> {
-    log(
-      "[ANSWER]",
-      conversationId,
-      "handleAnswer called",
-      { sdpLength: sdp?.length },
-    );
+    log("[ANSWER]", conversationId, "handleAnswer called", {
+      sdpLength: sdp?.length,
+    });
 
     if (this.isSettingRemoteAnswerPending) {
       log(
@@ -457,21 +469,13 @@ class PeerConnectionManager {
 
       if (this.pc) {
         await this.pc.setLocalDescription({ type: "rollback" });
-        log(
-          "[ANSWER]",
-          conversationId,
-          "rollback completed",
-        );
+        log("[ANSWER]", conversationId, "rollback completed");
       }
 
       this.makingOffer = false;
 
       // Re-negotiate after rollback
-      log(
-        "[ANSWER]",
-        conversationId,
-        "re-negotiating after rollback",
-      );
+      log("[ANSWER]", conversationId, "re-negotiating after rollback");
       await this.negotiate();
     } else {
       this.isSettingRemoteAnswerPending = true;
@@ -509,18 +513,13 @@ class PeerConnectionManager {
   ): Promise<void> {
     const candidateType =
       typeof candidate === "string" ? candidate.split(" ")[0] : "unknown";
-    log(
-      "[ICE-ADD]",
-      conversationId,
-      "addIceCandidate called",
-      {
-        candidate:
-          typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
-        type: candidateType,
-        sdpMid,
-        sdpMLineIndex,
-      },
-    );
+    log("[ICE-ADD]", conversationId, "addIceCandidate called", {
+      candidate:
+        typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
+      type: candidateType,
+      sdpMid,
+      sdpMLineIndex,
+    });
 
     const iceCandidate: RTCIceInitLocal = {
       candidate: typeof candidate === "string" ? candidate : undefined,
@@ -551,29 +550,19 @@ class PeerConnectionManager {
         sdpMid: iceCandidate.sdpMid ?? undefined,
         sdpMLineIndex: iceCandidate.sdpMLineIndex ?? undefined,
       });
-      log(
-        "[ICE-ADD]",
-        conversationId,
-        "addIceCandidate succeeded",
-        {
-          candidate:
-            typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
-          type: candidateType,
-          sdpMid,
-          sdpMLineIndex,
-        },
-      );
+      log("[ICE-ADD]", conversationId, "addIceCandidate succeeded", {
+        candidate:
+          typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
+        type: candidateType,
+        sdpMid,
+        sdpMLineIndex,
+      });
     } catch (err) {
-      log(
-        "[ICE-ADD]",
-        conversationId,
-        "addIceCandidate failed",
-        {
-          error: err instanceof Error ? err.message : String(err),
-          candidate:
-            typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
-        },
-      );
+      log("[ICE-ADD]", conversationId, "addIceCandidate failed", {
+        error: err instanceof Error ? err.message : String(err),
+        candidate:
+          typeof candidate === "string" ? candidate.slice(0, 80) : candidate,
+      });
     }
   }
 
@@ -627,11 +616,16 @@ class PeerConnectionManager {
   private async sendIceCandidate(candidate: RTCIceInitLocal) {
     const client = getSignalingClient();
     if (!client || !this.conversationId || !client.isConnected()) {
-      log("[ICE-SEND]", this.conversationId, "sendIceCandidate skipped (socket not ready)", {
-        hasClient: !!client,
-        hasConversationId: !!this.conversationId,
-        wsConnected: client?.isConnected() ?? false,
-      });
+      log(
+        "[ICE-SEND]",
+        this.conversationId,
+        "sendIceCandidate skipped (socket not ready)",
+        {
+          hasClient: !!client,
+          hasConversationId: !!this.conversationId,
+          wsConnected: client?.isConnected() ?? false,
+        },
+      );
       this.iceCandidateQueue.push(candidate);
       return;
     }
@@ -666,12 +660,17 @@ class PeerConnectionManager {
       const candidate = this.iceCandidateQueue.shift();
       if (candidate) {
         const candidateType = candidate.candidate?.split(" ")[0] ?? "unknown";
-        log("[ICE-SEND]", this.conversationId, "flushing queued ICE candidate", {
-          candidate: candidate.candidate?.slice(0, 80),
-          type: candidateType,
-          sdpMid: candidate.sdpMid,
-          sdpMLineIndex: candidate.sdpMLineIndex,
-        });
+        log(
+          "[ICE-SEND]",
+          this.conversationId,
+          "flushing queued ICE candidate",
+          {
+            candidate: candidate.candidate?.slice(0, 80),
+            type: candidateType,
+            sdpMid: candidate.sdpMid,
+            sdpMLineIndex: candidate.sdpMLineIndex,
+          },
+        );
         client.sendIceCandidate(
           this.conversationId,
           candidate.candidate ?? undefined,
@@ -679,6 +678,80 @@ class PeerConnectionManager {
           candidate.sdpMLineIndex ?? undefined,
         );
       }
+    }
+  }
+
+  /**
+   * Perform an ICE restart on the existing peer connection.
+   *
+   * Called when ICE connection state transitions to 'failed' — meaning no
+   * viable candidate pair could be established. The restart creates a new
+   * offer with fresh ICE credentials and sends it via the existing signaling
+   * channel, allowing the remote peer to respond with a new answer.
+   *
+   * Duplicate restart attempts are prevented via the isRestartingIce flag.
+   * Restart state is cleaned up after success or failure.
+   */
+  async restartIce(): Promise<void> {
+    if (this.isRestartingIce) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "ICE restart already in progress, skipping",
+      );
+      return;
+    }
+
+    if (!this.pc) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "no peer connection, skipping restart",
+      );
+      return;
+    }
+
+    this.isRestartingIce = true;
+    log("[ICE-RESTART]", this.conversationId, "starting ICE restart");
+
+    try {
+      await this.pc.restartIce();
+      log("[ICE-RESTART]", this.conversationId, "ICE restart initiated on RTCPeerConnection");
+
+      // Create a new offer with the restarted ICE credentials
+      const offer = await this.pc.createOffer();
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "createOffer completed after ICE restart",
+        { type: offer.type, sdpLength: offer.sdp?.length },
+      );
+      await this.pc.setLocalDescription(offer);
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "setLocalDescription completed after ICE restart",
+        { localDescriptionSdp: !!this.pc.localDescription?.sdp },
+      );
+
+      const offerSdp = this.pc.localDescription?.sdp;
+      if (!offerSdp) {
+        throw new Error("Failed to create offer SDP after ICE restart");
+      }
+
+      // Send the new offer via the existing signaling channel so the
+      // remote peer can respond with a new answer.
+      await this.sendOfferViaSignaling(offerSdp);
+      log("[ICE-RESTART]", this.conversationId, "ICE restart offer sent via signaling");
+    } catch (err) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "ICE restart failed",
+        { error: err instanceof Error ? err.message : String(err) },
+      );
+    } finally {
+      this.isRestartingIce = false;
     }
   }
 
