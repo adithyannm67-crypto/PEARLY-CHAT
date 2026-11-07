@@ -176,8 +176,7 @@ the app will not work reliably for real users across different networks.
 
 ## Optional / Refactoring / Nice-to-Have
 
-3. **Duplicate `getBrowserName()`/`log()` fully removed** — Already extracted
-   to `logger.ts`; verify no other files re-implement the same helper.
+None remaining — all optional items completed.
 
 ## Verification Checklist
 
