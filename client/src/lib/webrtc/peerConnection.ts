@@ -1,6 +1,6 @@
 import { getSignalingClient } from "./signalingClient";
 import { log } from "./logger";
-import { buildIceServers } from "./iceServers";
+import { fetchIceServers } from "./iceServers";
 import type { IceServer } from "./iceServers";
 
 type RTCIceInitLocal = {
@@ -53,7 +53,7 @@ class PeerConnectionManager {
   ) {
     this.handlers = handlers;
     this.config = {
-      iceServers: config.iceServers ?? buildIceServers(),
+      iceServers: config.iceServers ?? [],
       iceTransportPolicy: "all",
     };
   }
@@ -79,8 +79,11 @@ class PeerConnectionManager {
     this.handlers.onStateChange?.(state);
   }
 
-  private createPeerConnection(): RTCPeerConnection {
-    const pc = new RTCPeerConnection(this.config);
+  private createPeerConnection(iceServers: IceServer[]): RTCPeerConnection {
+    const pc = new RTCPeerConnection({
+      iceServers,
+      iceTransportPolicy: "all",
+    });
 
     pc.onicegatheringstatechange = () => {
       log(
@@ -189,6 +192,7 @@ class PeerConnectionManager {
     localUserId: string,
     peerUserId: string,
     conversationId: string,
+    iceServers?: IceServer[],
   ): Promise<void> {
     this.localUserId = localUserId;
     this.peerUserId = peerUserId;
@@ -203,7 +207,8 @@ class PeerConnectionManager {
     );
 
     if (!this.pc) {
-      this.pc = this.createPeerConnection();
+      const resolvedIceServers = iceServers ?? (await fetchIceServers());
+      this.pc = this.createPeerConnection(resolvedIceServers);
 
       // Set up onnegotiationneeded BEFORE creating data channel so the handler is registered
       // when createDataChannel triggers it.
@@ -355,7 +360,8 @@ class PeerConnectionManager {
 
     if (!this.pc) {
       log("[EDGE-OFFER]", conversationId, "no peer connection, creating one");
-      this.pc = this.createPeerConnection();
+      const offerIceServers = await fetchIceServers();
+      this.pc = this.createPeerConnection(offerIceServers);
       this.pc.onnegotiationneeded = async () => {
         await this.negotiate();
       };

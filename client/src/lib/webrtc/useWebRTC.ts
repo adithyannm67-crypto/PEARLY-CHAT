@@ -10,6 +10,8 @@ import {
   getDataChannelManager,
   type DataChannelMessage,
 } from './dataChannel';
+import { fetchIceServers } from './iceServers';
+import type { IceServer } from './iceServers';
 
 type ConnectionStatus =
   | 'disconnected'
@@ -63,6 +65,7 @@ export function useWebRTC({
   const peerUserIdRef = useRef<string | null>(null);
   const isOffererRef = useRef(false);
   const peerJoinedRef = useRef(false);
+  const iceServersRef = useRef<IceServer[]>([]);
 
   const addMessage = useCallback((message: DataChannelMessage) => {
     setMessages((prev) => {
@@ -112,6 +115,7 @@ export function useWebRTC({
             localUserId.current!,
             otherUserId,
             _conversationId,
+            iceServersRef.current,
           );
         } else {
           console.log(
@@ -134,7 +138,12 @@ export function useWebRTC({
         peerUserIdRef.current = peerUserId;
 
         if (localUserId.current && peerUserId) {
-          void manager.init(localUserId.current, peerUserId, _conversationId);
+          void manager.init(
+            localUserId.current,
+            peerUserId,
+            _conversationId,
+            iceServersRef.current,
+          );
         }
 
         setConnectionState('negotiating');
@@ -278,6 +287,10 @@ export function useWebRTC({
 
       await client.connect(token);
       await client.authenticate(token);
+
+      // Fetch ICE server configuration from backend (includes temporary TURN credentials)
+      const iceServers = await fetchIceServers();
+      iceServersRef.current = iceServers;
 
       // Join the room exactly once after authentication succeeds.
       client.joinRoom(conversationId);

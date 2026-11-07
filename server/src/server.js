@@ -10,6 +10,7 @@ import connectionRequestsHandler from "./api/connection-requests/route.js";
 import connectionRequestHistoryHandler from "./api/connection-request-history/route.js";
 import messagesHandler from "./api/messages/route.js";
 import usersHandler from "./api/users/route.js";
+import iceConfigHandler from "./api/ice-config/route.js";
 import * as responseHandler from "#utils/responseHandler.js";
 import handlePreflight from "#utils/handlePreflight.js";
 import parseCookies from "#utils/parseCookies.js";
@@ -45,6 +46,8 @@ const server = http.createServer(async (req, res) => {
       output = await messagesHandler(req, res);
     } else if (pathname === "/api/users") {
       output = await usersHandler(req, res);
+    } else if (pathname === "/api/ice-config") {
+      output = await iceConfigHandler(req, res);
     } else {
       responseHandler.notFoundResponse(res, "Route not found");
       return;
