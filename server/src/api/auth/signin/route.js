@@ -38,7 +38,23 @@ export default async function handler(req, res) {
     password,
   });
 
-  if (error || !data.session) {
+  if (error) {
+    // Only invalid credential errors return 401; everything else is a server error
+    const isInvalidCredentials =
+      typeof error.message === "string" &&
+      (error.message.toLowerCase().includes("invalid") ||
+        error.message.toLowerCase().includes("wrong") ||
+        error.message.toLowerCase().includes("incorrect") ||
+        error.message.toLowerCase().includes("credentials"));
+
+    if (isInvalidCredentials) {
+      throw new HttpError(401, "Invalid username or password");
+    }
+
+    throw new HttpError(500, "Internal server error");
+  }
+
+  if (!data.session) {
     throw new HttpError(401, "Invalid username or password");
   }
 
