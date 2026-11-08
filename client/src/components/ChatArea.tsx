@@ -68,6 +68,19 @@ export default function ChatArea() {
   const messageAreaRef = useRef<HTMLDivElement>(null);
   const isUserScrollingRef = useRef(false);
   const isSendingRef = useRef(false);
+  const pendingInitialScroll = useRef(false);
+
+  const scrollToBottom = useCallback(() => {
+    const area = messageAreaRef.current;
+    if (area) {
+      setTimeout(() => {
+        area.scrollTo({
+          top: area.scrollHeight,
+          behavior: 'smooth',
+        });
+      }, 0);
+    }
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     if (messageAreaRef.current) {
@@ -109,14 +122,21 @@ export default function ChatArea() {
     });
   }, [webrtcMessages, selectedConversationId]);
 
-  // When selectedConversationId changes, fetch messages from the API
+  // When selectedConversationId changes, clear messages and fetch from the API
   useEffect(() => {
-    if (!selectedConversationId) return;
+    if (!selectedConversationId) {
+      setLocalMessages([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
 
     let cancelled = false;
 
     async function loadMessages() {
+      setLocalMessages([]); // clear old conversation messages immediately
       setLoading(true);
+      setError('');
 
       try {
         const response = await authFetch(
@@ -151,8 +171,27 @@ export default function ChatArea() {
     };
   }, [selectedConversationId]);
 
+  // When conversation changes, reset scroll state and flag initial scroll
+  useEffect(() => {
+    if (selectedConversationId) {
+      isUserScrollingRef.current = false;
+      pendingInitialScroll.current = true;
+    } else {
+      pendingInitialScroll.current = false;
+    }
+  }, [selectedConversationId]);
+
   // Scroll to bottom when new messages arrive (only if user is near bottom)
   useEffect(() => {
+    if (!selectedConversationId || loading) return;
+
+    // On first load of a conversation, always scroll to bottom once messages exist
+    if (pendingInitialScroll.current && localMessages.length > 0) {
+      pendingInitialScroll.current = false;
+      scrollToBottom();
+      return;
+    }
+
     if (messageAreaRef.current && !isUserScrollingRef.current) {
       const area = messageAreaRef.current;
       const isNearBottom =
@@ -163,7 +202,7 @@ export default function ChatArea() {
         setScrollToBottomVisible(true);
       }
     }
-  }, [localMessages, scrollToBottom]);
+  }, [localMessages, selectedConversationId, loading, scrollToBottom]);
 
   const handleScroll = useCallback(() => {
     const area = messageAreaRef.current;
@@ -275,7 +314,7 @@ export default function ChatArea() {
         }
       })();
     },
-    [localMessages, sendWebRTCMessage],
+    [userId, isDataChannelOpen, selectedConversationId, sendWebRTCMessage, scrollToBottom],
   );
 
   // Empty State
