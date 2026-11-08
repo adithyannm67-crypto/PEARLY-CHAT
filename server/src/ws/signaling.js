@@ -12,7 +12,7 @@ const rooms = new Map();
 
 // conversationId + type + senderId + payload hash -> timestamp
 const signalingCache = new Map();
-const SIGNALING_CACHE_TTL = 30 * 1000;
+const SIGNALING_CACHE_TTL = 1000;
 
 function signalingKey(conversationId, type, senderId, payload) {
   let hash = "";
