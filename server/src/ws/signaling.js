@@ -379,9 +379,9 @@ export function setupSignaling(wss) {
     wss.clients.forEach((socket) => {
       if (socket.isAlive === false) {
         console.log(
-          `[ws] heartbeat terminate instanceId=${socket.instanceId} userId=${socket.userId} readyState=${socket.readyState}`
+          `[ws] heartbeat close instanceId=${socket.instanceId} userId=${socket.userId} readyState=${socket.readyState}`
         );
-        socket.terminate();
+        socket.close(1000, "heartbeat timeout");
         return;
       }
       socket.isAlive = false;
