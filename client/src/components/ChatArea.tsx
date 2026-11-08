@@ -80,12 +80,6 @@ export default function ChatArea() {
     }
   }, []);
 
-  const scrollToBottom = useCallback(() => {
-    if (messageAreaRef.current) {
-      messageAreaRef.current.scrollTop = messageAreaRef.current.scrollHeight;
-    }
-  }, []);
-
   const selectedConversationId = selectedConversation?.id ?? null;
 
   // Connect/disconnect WebRTC when conversation changes
