@@ -67,6 +67,7 @@ export default function ChatArea() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageAreaRef = useRef<HTMLDivElement>(null);
   const isUserScrollingRef = useRef(false);
+  const isSendingRef = useRef(false);
 
   const selectedConversationId = selectedConversation?.id ?? null;
 
@@ -174,8 +175,14 @@ export default function ChatArea() {
       if (!userId) return;
       setError('');
 
+      // Prevent double submission (e.g. mobile keyboard firing both
+      // keyDown and form submit for the same message).
+      if (isSendingRef.current) return;
+      isSendingRef.current = true;
+
       if (!isDataChannelOpen) {
         setError('WebRTC data channel is not open yet. Wait for connection.');
+        isSendingRef.current = false;
         return;
       }
 
@@ -200,6 +207,7 @@ export default function ChatArea() {
             ),
           );
           setError('Failed to send message.');
+          isSendingRef.current = false;
           return;
         }
 
@@ -220,6 +228,7 @@ export default function ChatArea() {
         setLocalMessages((prev) =>
           prev.map((m) => (m.id === optimisticId ? { ...m, status: 'sent' } : m)),
         );
+        isSendingRef.current = false;
       })();
     },
     [userId, isDataChannelOpen, selectedConversationId, sendWebRTCMessage],

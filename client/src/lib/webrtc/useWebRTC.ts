@@ -334,37 +334,25 @@ export function useWebRTC({
     async (content: string): Promise<boolean> => {
       if (!userId || !currentConversationId.current) return false;
       const sent = dataChannelRef.current?.send(content, userId);
-      if (sent) {
-        const optimistic: DataChannelMessage = {
-          type: 'text',
-          id: crypto.randomUUID(),
-          content,
-          timestamp: new Date().toISOString(),
-          senderId: userId,
-        };
-        setMessages((prev) => {
-          const exists = prev.some((m) => m.id === optimistic.id);
-          if (exists) return prev;
-          return [...prev, optimistic];
-        });
-
-        // Persist to backend for history across refreshes
-        try {
-          await authFetch('/api/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              conversationId: currentConversationId.current,
-              content,
-            }),
-          });
-        } catch {
-          // Persistence is best-effort; message still sent via data channel.
-        }
-
-        return true;
+      if (!sent) {
+        return false;
       }
-      return false;
+
+      // Persist to backend for history across refreshes
+      try {
+        await authFetch('/api/messages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId: currentConversationId.current,
+            content,
+          }),
+        });
+      } catch {
+        // Persistence is best-effort; message still sent via data channel.
+      }
+
+      return true;
     },
     [userId],
   );
