@@ -232,10 +232,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setSelectedConversationId(null);
     setShowChat(false);
 
-    await setOwnStatus(false);
-
-
-
     await signOut();
     router.push('/auth/login');
   };

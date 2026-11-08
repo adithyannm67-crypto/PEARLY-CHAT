@@ -1,14 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { authFetch } from '@/lib/authFetch';
-
-type UserPresence = {
-  user_id: string;
-  online: boolean;
-  last_seen: string;
-};
 
 interface UsePresenceReturn {
   onlineUsers: Map<string, boolean>;
@@ -16,11 +10,39 @@ interface UsePresenceReturn {
   isOwnOnline: boolean;
 }
 
+/**
+ * Derive the online-users map from the complete Supabase Realtime Presence
+ * state. A user is considered online only when at least one presence entry
+ * exists for their user_id. This correctly handles multiple tabs and devices
+ * belonging to the same user.
+ *
+ * @param presenceState - Raw presence state from channel.presenceState().
+ *                        Keys are user IDs, values are arrays of presence entries.
+ * @param ownUserId     - The local user's ID, excluded from the result map.
+ * @returns Map of other user IDs to true (online).
+ */
+function deriveOnlineUsersFromPresence(
+  presenceState: Record<string, unknown[]>,
+  ownUserId: string | null
+): Map<string, boolean> {
+  const online = new Map<string, boolean>();
+  for (const [userId, entries] of Object.entries(presenceState)) {
+    if (ownUserId && userId === ownUserId) continue;
+    if (entries && Array.isArray(entries) && entries.length > 0) {
+      online.set(userId, true);
+    }
+  }
+  return online;
+}
+
 export function usePresence(userId: string | null): UsePresenceReturn {
   const [onlineUsers, setOnlineUsers] = useState<Map<string, boolean>>(
     new Map()
   );
   const [isOwnOnline, setIsOwnOnline] = useState(false);
+
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const setOwnStatus = useCallback(
     async (isOnline: boolean) => {
@@ -45,56 +67,49 @@ export function usePresence(userId: string | null): UsePresenceReturn {
   useEffect(() => {
     if (!userId) return;
 
-    // Mark self online in DB for persistence on mount.
-    void setOwnStatus(true);
+    // Mark self online in DB for persistence on mount (best-effort, one-time).
+    void (async () => {
+      await setOwnStatus(true);
+    })();
 
     const channel = supabase.channel('presence:global');
+    channelRef.current = channel;
+
+    // Synchronise onlineUsers from the current presence state.
+    const syncPresence = () => {
+      try {
+        const state = channel.presenceState();
+        setOnlineUsers(deriveOnlineUsersFromPresence(state, userId));
+      } catch {
+        // Ignore presence-state read errors; join/leave events will populate.
+      }
+    };
 
     // Others came online.
     channel.on(
       'presence',
       { event: 'join' },
-      ({ newPresences }) => {
-        setOnlineUsers((prev) => {
-          const next = new Map(prev);
-          if (!newPresences) return next;
-          for (const presences of Object.values(newPresences)) {
-            const presenceList = Array.isArray(presences)
-              ? presences
-              : [presences];
-            for (const presence of presenceList) {
-              const p = presence as unknown as UserPresence;
-              if (p.user_id && p.user_id !== userId) {
-                next.set(p.user_id, true);
-              }
-            }
-          }
-          return next;
-        });
+      () => {
+        syncPresence();
       }
     );
 
-    // Others went offline.
+    // Others went offline. Reconcile against the full presence state so a user
+    // with remaining tabs/devices stays online even after one connection leaves.
     channel.on(
       'presence',
       { event: 'leave' },
-      ({ leftPresences }) => {
-        setOnlineUsers((prev) => {
-          const next = new Map(prev);
-          if (!leftPresences) return next;
-          for (const presences of Object.values(leftPresences)) {
-            const presenceList = Array.isArray(presences)
-              ? presences
-              : [presences];
-            for (const presence of presenceList) {
-              const p = presence as unknown as UserPresence;
-              if (p.user_id) {
-                next.delete(p.user_id);
-              }
-            }
-          }
-          return next;
-        });
+      () => {
+        syncPresence();
+      }
+    );
+
+    // Supabase sends a 'sync' event on initial subscription and reconnection.
+    channel.on(
+      'presence',
+      { event: 'sync' },
+      () => {
+        syncPresence();
       }
     );
 
@@ -108,52 +123,57 @@ export function usePresence(userId: string | null): UsePresenceReturn {
             last_seen: new Date().toISOString(),
           });
           setIsOwnOnline(true);
+          syncPresence();
         } catch {
           // Ignore track errors on subscribe.
         }
       }
     });
 
-    // Lightweight presence heartbeat via Realtime channel (no REST/DB write).
-    const heartbeat = setInterval(() => {
-      try {
-        void channel.track({
-          user_id: userId,
-          online: true,
-          last_seen: new Date().toISOString(),
-        });
-      } catch {
-        // Ignore track errors during heartbeat (channel may be closing).
+    // Heartbeat: re-track periodically to keep this tab's presence alive.
+    // Supabase Realtime handles its own connection timeout and presence cleanup.
+    // track() returns a Promise; await it so rejections are surfaced.
+    const startHeartbeat = () => {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
       }
-    }, 30000);
-
-    // Mark offline on page close.
-    const handleBeforeUnload = () => {
-      try {
-        void channel.untrack();
-      } catch {
-        // Ignore untrack errors on unload.
-      }
-      void setOwnStatus(false);
+      heartbeatRef.current = setInterval(async () => {
+        try {
+          await channel.track({
+            user_id: userId,
+            online: true,
+            last_seen: new Date().toISOString(),
+          });
+        } catch {
+          // Ignore track errors during heartbeat; channel may be closing.
+        }
+      }, 30000);
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    startHeartbeat();
 
     return () => {
-      clearInterval(heartbeat);
+      // Stop heartbeat.
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+
+      // Untrack only this tab's presence. Do NOT mark the entire user offline:
+      // another tab or device may still be active.
       try {
         void channel.untrack();
       } catch {
         // Ignore untrack errors during cleanup.
       }
-      void setOwnStatus(false);
-      setIsOwnOnline(false);
+
       try {
         supabase.removeChannel(channel);
       } catch {
         // Ignore removeChannel errors during cleanup.
       }
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      channelRef.current = null;
     };
   }, [userId, setOwnStatus]);
 
