@@ -394,6 +394,20 @@ export function setupSignaling(wss) {
       }
       socket.isAlive = false;
       socket.ping();
+
+      // Per-socket pong timeout: if no pong within HEARTBEAT_TIMEOUT,
+      // close immediately instead of waiting for the next interval.
+      if (socket.pongTimeout) {
+        clearTimeout(socket.pongTimeout);
+      }
+      socket.pongTimeout = setTimeout(() => {
+        if (socket.isAlive === false) {
+          console.log(
+            `[ws] pong timeout close instanceId=${socket.instanceId} userId=${socket.userId} readyState=${socket.readyState}`
+          );
+          socket.close(1000, "heartbeat timeout");
+        }
+      }, HEARTBEAT_TIMEOUT);
     });
   }, HEARTBEAT_INTERVAL);
 
@@ -411,6 +425,10 @@ export function setupSignaling(wss) {
 
     socket.on("pong", () => {
       socket.isAlive = true;
+      if (socket.pongTimeout) {
+        clearTimeout(socket.pongTimeout);
+        socket.pongTimeout = null;
+      }
     });
 
     console.log(
@@ -446,6 +464,10 @@ export function setupSignaling(wss) {
     });
 
     socket.on("close", (code, reason) => {
+      if (socket.pongTimeout) {
+        clearTimeout(socket.pongTimeout);
+        socket.pongTimeout = null;
+      }
       console.log(
         `[ws] close instanceId=${socket.instanceId} code=${code} reason=${reason} userId=${socket.userId} readyState=${socket.readyState} rooms=${JSON.stringify(
           [...socket.rooms]
