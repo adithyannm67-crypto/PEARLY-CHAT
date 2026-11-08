@@ -114,13 +114,17 @@ function removeSocketFromRoom(socket, conversationId) {
   socket.rooms.delete(conversationId);
 
   if (socket.userId) {
-    const others = [...room.sockets].filter((s) => s.userId !== socket.userId);
-    for (const other of others) {
-      send(other, {
-        type: "PEER_LEFT",
-        conversationId,
-        userId: socket.userId,
-      });
+    const userSockets = room.participants.get(socket.userId);
+    const userFullyLeft = !userSockets || userSockets.size === 0;
+    if (userFullyLeft) {
+      const others = [...room.sockets].filter((s) => s.userId !== socket.userId);
+      for (const other of others) {
+        send(other, {
+          type: "PEER_LEFT",
+          conversationId,
+          userId: socket.userId,
+        });
+      }
     }
   }
 
