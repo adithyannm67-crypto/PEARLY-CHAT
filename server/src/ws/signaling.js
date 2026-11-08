@@ -49,7 +49,11 @@ function getRoom(conversationId) {
 function send(socket, payload) {
   if (socket.readyState === WebSocket.OPEN) {
     console.log("[ws] send:", payload.type, JSON.stringify(payload).slice(0, 120));
-    socket.send(JSON.stringify(payload));
+    try {
+      socket.send(JSON.stringify(payload));
+    } catch (err) {
+      console.error("[ws] send failed:", err);
+    }
   }
 }
 
