@@ -480,8 +480,11 @@ export function setupSignaling(wss) {
       handleClose(socket);
     });
 
-    socket.on("error", () => {
-      handleClose(socket);
+    socket.on("error", (err) => {
+      console.error(
+        `[ws] error instanceId=${socket.instanceId} userId=${socket.userId}`,
+        err
+      );
     });
   });
 }
