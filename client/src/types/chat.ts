@@ -23,7 +23,7 @@ export interface Message {
   senderId: string;
   content: string;
   timestamp: string;
-  status: "sent" | "delivered" | "read";
+  status: "sending" | "sent" | "delivered" | "read" | "failed";
 }
 
 export type ConnectionRequestStatus = "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";

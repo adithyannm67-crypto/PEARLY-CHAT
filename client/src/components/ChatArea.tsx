@@ -1,20 +1,19 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MessageCircle,
   Phone,
   Video,
   MoreVertical,
   ArrowLeft,
-  Paperclip,
-  Smile,
-  SendHorizontal,
 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
+import MessageBubble from '@/components/MessageBubble';
+import MessageComposer from '@/components/MessageComposer';
+import TypingIndicator from '@/components/TypingIndicator';
 import { useDashboard } from '@/context/DashboardContext';
 import { authFetch } from '@/lib/authFetch';
-import { useWebRTC } from '@/lib/webrtc/useWebRTC';
 import ConnectionStatus from '@/components/webrtc/ConnectionStatus';
 import type { Conversation, Message } from '@/types/chat';
 
@@ -48,42 +47,28 @@ function formatDateLabel(dateString: string): string {
   });
 }
 
-function formatMessageTime(ts: string): string {
-  const date = new Date(ts);
-  if (isNaN(date.getTime())) return '';
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
 export default function ChatArea() {
-  const { userId, selectedConversation, handleBack, onlineUsers, webrtcConnectionState,
+  const {
+    userId,
+    selectedConversation,
+    handleBack,
+    onlineUsers,
+    webrtcConnectionState,
     isDataChannelOpen,
     webrtcMessages,
     connectWebRTC,
     disconnectWebRTC,
-    sendWebRTCMessage, } = useDashboard();
-  const [messageInput, setMessageInput] = useState('');
+    sendWebRTCMessage,
+  } = useDashboard();
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [scrollToBottomVisible, setScrollToBottomVisible] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messageAreaRef = useRef<HTMLDivElement>(null);
+  const isUserScrollingRef = useRef(false);
 
   const selectedConversationId = selectedConversation?.id ?? null;
-
-  // const {
-  //   connectionState: webrtcConnectionState,
-  //   isDataChannelOpen,
-  //   messages: webrtcMessages,
-  //   connect: connectWebRTC,
-  //   disconnect: disconnectWebRTC,
-  //   sendMessage: sendWebRTCMessage,
-  // } = useWebRTC({
-  //   conversationId: selectedConversationId,
-  //   userId,
-  // });
 
   // Connect/disconnect WebRTC when conversation changes
   useEffect(() => {
@@ -101,25 +86,23 @@ export default function ChatArea() {
   useEffect(() => {
     if (webrtcMessages.length === 0) return;
 
-    void Promise.resolve().then(() => {
-      setLocalMessages((previous) => {
-        const incoming = webrtcMessages.filter(
-          (m) => !previous.some((p) => p.id === m.id),
-        );
-        const mapped: Message[] = incoming.map((m) => ({
-          id: m.id,
-          conversationId: selectedConversationId ?? '',
-          senderId: m.senderId,
-          content: m.content,
-          timestamp: m.timestamp,
-          status: 'sent',
-        }));
-        return [...previous, ...mapped];
-      });
+    setLocalMessages((previous) => {
+      const incoming = webrtcMessages.filter(
+        (m) => !previous.some((p) => p.id === m.id),
+      );
+      const mapped: Message[] = incoming.map((m) => ({
+        id: m.id,
+        conversationId: selectedConversationId ?? '',
+        senderId: m.senderId,
+        content: m.content,
+        timestamp: m.timestamp,
+        status: 'delivered',
+      }));
+      return [...previous, ...mapped];
     });
   }, [webrtcMessages, selectedConversationId]);
 
-  // When selectedConversationId changes, fetch messages from the Next.js API
+  // When selectedConversationId changes, fetch messages from the API
   useEffect(() => {
     if (!selectedConversationId) return;
 
@@ -131,7 +114,7 @@ export default function ChatArea() {
       try {
         const response = await authFetch(
           `/api/messages?conversationId=${encodeURIComponent(selectedConversationId!)}`,
-          { cache: 'no-store' }
+          { cache: 'no-store' },
         );
         const data = await response.json();
 
@@ -161,39 +144,92 @@ export default function ChatArea() {
     };
   }, [selectedConversationId]);
 
-  // Scroll to bottom when localMessages changes
+  // Scroll to bottom when new messages arrive (only if user is near bottom)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messageAreaRef.current && !isUserScrollingRef.current) {
+      const area = messageAreaRef.current;
+      const isNearBottom =
+        area.scrollHeight - area.scrollTop - area.clientHeight < 100;
+      if (isNearBottom) {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        setScrollToBottomVisible(true);
+      }
+    }
   }, [localMessages]);
+
+  const handleScroll = useCallback(() => {
+    const area = messageAreaRef.current;
+    if (!area) return;
+    const isNearBottom =
+      area.scrollHeight - area.scrollTop - area.clientHeight < 100;
+    isUserScrollingRef.current = !isNearBottom;
+    setScrollToBottomVisible(!isNearBottom);
+  }, []);
 
   const otherUser = selectedConversation?.otherUser ?? null;
 
-  const handleSend = async () => {
-    const trimmed = messageInput.trim();
-    if (!trimmed || !userId) return;
+  const handleSendMessage = useCallback(
+    (content: string) => {
+      if (!userId) return;
+      setError('');
 
-    setError('');
+      if (!isDataChannelOpen) {
+        setError('WebRTC data channel is not open yet. Wait for connection.');
+        return;
+      }
 
-    if (!isDataChannelOpen) {
-      setError('WebRTC data channel is not open yet. Wait for connection.');
-      return;
-    }
+      const optimisticId = crypto.randomUUID();
+      const optimistic: Message = {
+        id: optimisticId,
+        conversationId: selectedConversationId ?? '',
+        senderId: userId,
+        content,
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+      };
 
-    const sent = await sendWebRTCMessage(trimmed);
-    if (!sent) {
-      setError('Failed to send message.');
-      return;
-    }
+      setLocalMessages((prev) => [...prev, optimistic]);
 
-    setMessageInput('');
-  };
+      void (async () => {
+        const sent = await sendWebRTCMessage(content);
+        if (!sent) {
+          setLocalMessages((prev) =>
+            prev.map((m) =>
+              m.id === optimisticId ? { ...m, status: 'failed' } : m,
+            ),
+          );
+          setError('Failed to send message.');
+          return;
+        }
 
-  // Empty State (when no selectedConversation is selected)
+        // Persist to backend
+        try {
+          await authFetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversationId: selectedConversationId,
+              content,
+            }),
+          });
+        } catch {
+          // Persistence is best-effort
+        }
+
+        setLocalMessages((prev) =>
+          prev.map((m) => (m.id === optimisticId ? { ...m, status: 'sent' } : m)),
+        );
+      })();
+    },
+    [userId, isDataChannelOpen, selectedConversationId, sendWebRTCMessage],
+  );
+
+  // Empty State
   if (!selectedConversationId || !selectedConversation || !otherUser) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-bg-main h-full safe-area-inset-top">
+      <div className="flex-1 flex flex-col items-center justify-center bg-bg-main h-full safe-area-inset-top">
         <div className="flex flex-col items-center text-center p-6 select-none">
-          {/* Decorative circle */}
           <div className="w-24 h-24 rounded-full bg-surface/50 flex items-center justify-center mb-6">
             <MessageCircle size={40} className="text-text-secondary/30" />
           </div>
@@ -208,12 +244,11 @@ export default function ChatArea() {
     );
   }
 
-  // Chat View (when selectedConversationId is set)
+  // Chat View
   return (
     <div className="flex flex-col h-full bg-bg-main">
       {/* 1. Chat Header */}
       <header className="h-16 bg-bg-secondary border-b border-border-custom px-4 flex items-center gap-3 shrink-0 safe-area-inset-top">
-        {/* Back button (mobile) */}
         <button
           type="button"
           onClick={handleBack}
@@ -223,28 +258,29 @@ export default function ChatArea() {
           <ArrowLeft size={20} />
         </button>
 
-        {/* Avatar */}
         <Avatar
           initials={otherUser.avatar}
           size="md"
           showOnline={onlineUsers.get(otherUser.id) === true}
         />
 
-        {/* Info section */}
         <div className="flex-1 min-w-0">
-          <h2 className="font-medium text-text-primary truncate">{otherUser.name}</h2>
+          <h2 className="font-medium text-text-primary truncate">
+            {otherUser.name}
+          </h2>
           <p className="text-xs">
             {onlineUsers.get(otherUser.id) === true ? (
               <span className="text-online font-medium">Online</span>
             ) : (
               <span className="text-text-secondary">
-                {otherUser.lastSeen ? `Last seen ${formatDateLabel(otherUser.lastSeen)}` : 'Offline'}
+                {otherUser.lastSeen
+                  ? `Last seen ${formatDateLabel(otherUser.lastSeen)}`
+                  : 'Offline'}
               </span>
             )}
           </p>
         </div>
 
-        {/* Right icons */}
         <div className="flex items-center gap-1">
           <ConnectionStatus
             status={webrtcConnectionState}
@@ -275,7 +311,11 @@ export default function ChatArea() {
       </header>
 
       {/* 2. Message area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-1 pb-10 safe-area-inset-bottom no-pull-to-refresh">
+      <div
+        ref={messageAreaRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-1 pb-10 safe-area-inset-bottom no-pull-to-refresh"
+      >
         {loading && (
           <div className="text-center text-sm text-text-secondary py-4">
             Loading messages...
@@ -305,116 +345,46 @@ export default function ChatArea() {
 
           return (
             <div key={msg.id}>
-              {/* Date separator */}
-              {showDateSeparator && (
-                <div className="flex justify-center my-4">
-                  <span className="bg-surface/80 text-text-secondary text-[11px] px-3 py-1 rounded-full select-none">
-                    {formatDateLabel(dateKey)}
-                  </span>
+              {showDateSeparator && dateKey && (
+                <div className="date-separator my-4">
+                  <span>{formatDateLabel(dateKey)}</span>
                 </div>
               )}
 
-              {/* Message row */}
-              <div
-                className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-3' : 'mt-1'
-                  }`}
-              >
-                  <div
-                    className={`flex flex-col ${isSent ? 'items-end' : 'items-start'
-                      } max-w-[85%]`}
-                  >
-                  {/* Bubble */}
-                  <div
-                    className={`px-4 py-2 w-fit break-words text-sm leading-relaxed ${isSent
-                      ? 'bg-primary text-white rounded-2xl rounded-br-sm'
-                      : 'bg-surface text-text-primary rounded-2xl rounded-bl-sm'
-                      }`}
-                  >
-                    {msg.content}
-                  </div>
-
-                  {/* Below bubble: Time & Status */}
-                  <div className="flex items-center gap-1 mt-0.5 px-1 select-none">
-                    <span className="text-[10px] text-text-secondary/50">
-                      {formatMessageTime(msg.timestamp)}
-                    </span>
-                    {isSent && (
-                      <span
-                        className={`text-[10px] ${msg.status === 'read'
-                          ? 'text-primary'
-                          : 'text-text-secondary/50'
-                          }`}
-                      >
-                        {msg.status === 'sent' ? '✓' : '✓✓'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <MessageBubble
+                message={msg}
+                userId={userId}
+                isFirstInGroup={isFirstInGroup}
+                showDateSeparator={false}
+                dateLabel=""
+                prevMessage={prevMsg}
+              />
             </div>
           );
         })}
         <div ref={messagesEndRef} />
-      </div>
 
-      {/* 3. Message input bar */}
-      <div className="bg-bg-secondary border-t border-border-custom p-3 shrink-0 safe-area-inset-bottom">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleSend();
-          }}
-          className="flex items-center gap-2"
-        >
-          {/* Paperclip button */}
+        {scrollToBottomVisible && (
           <button
             type="button"
-            aria-label="Attach file"
-            className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer touch-target"
-          >
-            <Paperclip size={18} />
-          </button>
-
-          {/* Input field */}
-          <input
-            type="text"
-            placeholder="Type a message..."
-            value={messageInput}
-            onChange={(e) => setMessageInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
+            onClick={() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              setScrollToBottomVisible(false);
             }}
-            className="flex-1 bg-surface rounded-full px-4 py-2.5 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30 border-none"
-          />
-
-          {/* Smile button */}
-          <button
-            type="button"
-            aria-label="Insert emoji"
-            className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer touch-target"
+            className="scroll-to-bottom-btn"
+            aria-label="Scroll to bottom"
           >
-            <Smile size={18} />
+            <MessageCircle size={16} />
           </button>
-
-          {/* Send button */}
-          <button
-            type="submit"
-            disabled={
-              !messageInput.trim() || !isDataChannelOpen || !userId
-            }
-            aria-label="Send message"
-            className={`p-2.5 rounded-full transition-all ${messageInput.trim() && isDataChannelOpen && userId
-              ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm touch-target'
-              : 'bg-surface text-text-secondary cursor-not-allowed touch-target'
-              }`}
-          >
-            <SendHorizontal size={18} />
-          </button>
-        </form>
+        )}
       </div>
+
+      {/* 3. Message composer */}
+      <MessageComposer
+        onSend={handleSendMessage}
+        disabled={!isDataChannelOpen || !userId}
+        placeholder="Type a message..."
+      />
     </div>
   );
 }

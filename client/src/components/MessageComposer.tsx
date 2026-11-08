@@ -18,6 +18,17 @@ export default function MessageComposer({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [hasContent, setHasContent] = useState(false);
 
+  const handleSend = useCallback(() => {
+    const trimmed = messageInput.trim();
+    if (!trimmed || disabled) return;
+    onSend(trimmed);
+    setMessageInput('');
+    setHasContent(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
+  }, [messageInput, disabled, onSend]);
+
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setMessageInput(e.target.value);
@@ -36,19 +47,8 @@ export default function MessageComposer({
     [handleSend],
   );
 
-  const handleSend = useCallback(() => {
-    const trimmed = messageInput.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
-    setMessageInput('');
-    setHasContent(false);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-    }
-  }, [messageInput, disabled, onSend]);
-
-  const handleTextareaChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleTextareaInput = useCallback(
+    (e: React.InputEvent<HTMLTextAreaElement>) => {
       const el = textareaRef.current;
       if (el) {
         el.style.height = 'auto';
@@ -80,12 +80,11 @@ export default function MessageComposer({
         {/* Input field */}
         <textarea
           ref={textareaRef}
-          type="text"
           placeholder={placeholder}
           value={messageInput}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onInput={handleTextareaChange}
+          onInput={handleTextareaInput}
           className="composer-textarea flex-1 bg-surface rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30 border-none max-h-[120px] min-h-[8px]"
         />
 

@@ -45,21 +45,33 @@ function DashboardInner() {
           <Sidebar />
         </aside>
       )}
+
       {/* Desktop: always show sidebar alongside chat */}
       <aside className="hidden md:flex flex-col h-full bg-bg-secondary select-none md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom">
         <Sidebar />
       </aside>
+
       <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
-        <ChatArea />
-        {showChat && (
-          <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Back to conversations"
-            className="absolute left-3 top-3 z-20 p-2 rounded-lg bg-black/60 text-white hover:bg-black/70 transition-colors cursor-pointer md:hidden touch-target"
-          >
-            <ArrowLeft size={20} />
-          </button>
+        {showChat ? (
+          <>
+            <ChatArea />
+            <button
+              type="button"
+              onClick={handleBack}
+              aria-label="Back to conversations"
+              className="absolute left-3 top-3 z-20 p-2 rounded-lg bg-black/60 text-white hover:bg-black/70 transition-colors cursor-pointer md:hidden touch-target"
+            >
+              <ArrowLeft size={20} />
+            </button>
+          </>
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-bg-main">
+            <div className="text-center">
+              <p className="text-text-secondary text-sm">
+                Select a conversation to start chatting
+              </p>
+            </div>
+          </div>
         )}
       </main>
     </div>
