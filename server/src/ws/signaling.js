@@ -442,9 +442,13 @@ export function setupSignaling(wss) {
     (async () => {
       try {
         const token = extractToken(request);
-        if (token && !socket.authenticated) {
+        if (token && !socket.authenticated && socket.readyState === WebSocket.OPEN) {
           const user = await authenticateUser(token);
-          if (user && !socket.authenticated) {
+          if (
+            user &&
+            !socket.authenticated &&
+            socket.readyState === WebSocket.OPEN
+          ) {
             socket.userId = user.id;
             socket.accessToken = token;
             socket.authenticated = true;
