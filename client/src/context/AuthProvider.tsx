@@ -44,11 +44,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       requireSupabaseEnv();
     } catch (err) {
-      setConfigError(
-        err instanceof Error
-          ? err.message
-          : 'Missing Supabase configuration. Please check environment variables.',
-      );
+      setTimeout(() => {
+        setConfigError(
+          err instanceof Error
+            ? err.message
+            : 'Missing Supabase configuration. Please check environment variables.',
+        );
+      }, 0);
     }
   }, []);
 

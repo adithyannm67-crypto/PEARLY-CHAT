@@ -71,7 +71,7 @@ export function useWebRTC({
   // Track messages waiting for delivery acknowledgement
   type PendingAck = {
     resolve: (value: boolean) => void;
-    reject: (reason?: any) => void;
+    reject: (reason?: unknown) => void;
     timeoutId: ReturnType<typeof setTimeout>;
   };
   const pendingAcksRef = useRef<Map<string, PendingAck>>(new Map());

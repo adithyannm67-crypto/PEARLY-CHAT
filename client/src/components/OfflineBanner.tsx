@@ -11,10 +11,12 @@ export default function OfflineBanner() {
   // Detect transition from offline → online and show a temporary restoration notice
   useEffect(() => {
     if (lastOnlineState === false && isOnline === true) {
-      setShowOnlineToast(true);
-      setTimeout(() => setShowOnlineToast(false), 5000);
+      setTimeout(() => {
+        setShowOnlineToast(true);
+        setTimeout(() => setShowOnlineToast(false), 5000);
+      }, 0);
     }
-    setLastOnlineState(isOnline);
+    setTimeout(() => setLastOnlineState(isOnline), 0);
   }, [isOnline, lastOnlineState]);
 
   // Persistent offline banner

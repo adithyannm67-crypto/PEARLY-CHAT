@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import { SERVER_URL, requireServerUrl } from './serverProxy';
+import { requireServerUrl } from './serverProxy';
 
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 2;
