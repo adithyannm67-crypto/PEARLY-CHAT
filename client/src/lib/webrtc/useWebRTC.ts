@@ -257,7 +257,8 @@ export function useWebRTC({
     });
 
     return () => {
-      client.disconnect();
+      // The shared signaling WebSocket stays alive across unmounts (conversation
+      // switches, navigation, tab changes). Only WebRTC resources are cleaned up.
       manager.close();
       channelMgr.close();
       signalingClientRef.current = null;
