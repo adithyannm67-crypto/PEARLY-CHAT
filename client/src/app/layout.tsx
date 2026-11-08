@@ -38,7 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="h-full bg-bg-main text-text-primary font-sans no-pull-to-refresh">
         <AuthProvider>{children}</AuthProvider>
-        <OfflineBanner />
+        {/* <OfflineBanner /> */}
       </body>
     </html>
   );
