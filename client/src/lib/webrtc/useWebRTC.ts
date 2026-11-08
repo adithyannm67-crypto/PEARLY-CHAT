@@ -271,39 +271,6 @@ export function useWebRTC({
     localUserId.current = userId;
   }, [userId]);
 
-  useEffect(() => {
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState !== 'visible') return;
-
-      const client = signalingClientRef.current;
-      if (!client) return;
-
-      // If the heartbeat detected a stale connection while the tab was
-      // backgrounded, reconnect and rejoin the active conversation room.
-      if (!client.isHealthy()) {
-        const { data } = await supabase.auth.getSession();
-        const token = data?.session?.access_token;
-        if (!token) return;
-
-        try {
-          await client.reconnect(token);
-        } catch (err) {
-          console.error('[webrtc] visibility reconnect failed:', err);
-          return;
-        }
-
-        if (currentConversationId.current && client.isConnected()) {
-          client.joinRoom(currentConversationId.current);
-        }
-      }
-    };
-
-    window.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [supabase]);
-
   const connect = useCallback(async () => {
     if (!conversationId || !userId) return;
     if (currentConversationId.current === conversationId) return;
@@ -329,7 +296,6 @@ export function useWebRTC({
       }
 
       await client.connect(token);
-      await client.authenticate(token);
 
       // Fetch ICE server configuration from backend (includes temporary TURN credentials)
       const iceServers = await fetchIceServers();

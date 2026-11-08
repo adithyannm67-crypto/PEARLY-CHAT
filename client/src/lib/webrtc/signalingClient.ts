@@ -17,8 +17,7 @@ type SignalingEvent =
       sdpMid?: string;
       sdpMLineIndex?: number;
     }
-  | { type: 'ERROR'; code: string; message: string }
-  | { type: 'PONG'; timestamp: number };
+  | { type: 'ERROR'; code: string; message: string };
 
 type SignalingHandlers = {
   onAuthenticated?: (userId: string) => void;
@@ -52,11 +51,10 @@ class SignalingClient {
   private isConnecting = false;
   private shouldReconnect = true;
   private readonly instanceId: string;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastPongReceived = 0;
-  private readonly HEARTBEAT_INTERVAL = 30000;
-  private readonly HEARTBEAT_TIMEOUT = 5000;
+  private connectionGeneration = 0;
+  private authPending = false;
+  private authPromiseResolve: ((userId: string) => void) | null = null;
+  private authPromiseReject: ((err: Error) => void) | null = null;
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
@@ -106,17 +104,54 @@ class SignalingClient {
 
         ws.onopen = () => {
           this.isConnecting = false;
+          const gen = ++this.connectionGeneration;
           this.reconnectAttempts = 0;
           this.setState('connected');
-          this.lastPongReceived = Date.now();
           this.handlers.onConnect?.();
           log('[WS]', null, 'WebSocket opened', {
             instanceId: this.instanceId,
+            generation: gen,
             readyState: ws.readyState,
             url: this.url,
           });
-          this.startHeartbeat();
-          resolve();
+
+          // Send AUTH exactly once per connection using the token from the query string.
+          // The server authenticates via the URL token and replies with AUTHENTICATED.
+          this.authPending = true;
+          this.ws?.send(
+            JSON.stringify({ type: 'AUTH', token: effectiveToken ?? '' }),
+          );
+
+          return new Promise<void>((authResolve, authReject) => {
+            const authTimeout = setTimeout(() => {
+              if (this.authPending) {
+                this.authPending = false;
+                this.authPromiseResolve = null;
+                this.authPromiseReject = null;
+                authReject(new Error('Authentication timeout'));
+              }
+            }, 10000);
+            this.authPromiseResolve = (userId: string) => {
+              clearTimeout(authTimeout);
+              this.authPending = false;
+              this.authPromiseResolve = null;
+              this.authPromiseReject = null;
+              authResolve();
+            };
+            this.authPromiseReject = (err: Error) => {
+              clearTimeout(authTimeout);
+              this.authPending = false;
+              this.authPromiseResolve = null;
+              this.authPromiseReject = null;
+              authReject(err);
+            };
+          }).then(() => {
+            log('[WS]', null, 'authenticated via WebSocket', {
+              instanceId: this.instanceId,
+              generation: gen,
+            });
+            resolve();
+          });
         };
 
         ws.onmessage = (event) => {
@@ -141,7 +176,11 @@ class SignalingClient {
         };
 
         ws.onclose = (event) => {
-          this.stopHeartbeat();
+          // Only the current connection generation may update shared state.
+          // A delayed close from an older connection is ignored.
+          if (this.ws !== ws) {
+            return;
+          }
           this.ws = null;
           if (this.state !== 'disconnected') {
             this.setState('disconnected');
@@ -153,6 +192,15 @@ class SignalingClient {
               reconnectAttempts: this.reconnectAttempts,
               shouldReconnect: this.shouldReconnect,
             });
+            // Reject pending auth if any.
+            if (this.authPromiseReject) {
+              this.authPromiseReject(
+                new Error(`WebSocket closed: ${event.code} ${event.reason}`),
+              );
+              this.authPromiseReject = null;
+              this.authPromiseResolve = null;
+              this.authPending = false;
+            }
             this.handlers.onDisconnect?.();
             if (this.shouldReconnect) {
               this.scheduleReconnect();
@@ -206,6 +254,12 @@ class SignalingClient {
   private handleMessage(message: SignalingEvent) {
     switch (message.type) {
       case 'AUTHENTICATED':
+        if (this.authPending && this.authPromiseResolve) {
+          this.authPending = false;
+          this.authPromiseResolve(message.userId);
+          this.authPromiseResolve = null;
+          this.authPromiseReject = null;
+        }
         this.handlers.onAuthenticated?.(message.userId);
         break;
       case 'ROOM_JOINED':
@@ -246,18 +300,14 @@ class SignalingClient {
       case 'ERROR':
         this.handlers.onError?.(message.code, message.message);
         break;
-      case 'PONG':
-        this.lastPongReceived = Date.now();
-        break;
     }
   }
 
   async authenticate(token?: string): Promise<boolean> {
-    const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
-    if (!effectiveToken) {
-      return false;
-    }
-    return this.send({ type: 'AUTH', token: effectiveToken });
+    // Authentication is performed inside connect() immediately after the
+    // WebSocket opens. This method is a no-op status check kept for API
+    // compatibility with callers that invoke it after connect().
+    return this.isConnected() && !this.authPending;
   }
 
   joinRoom(conversationId: string): boolean {
@@ -298,49 +348,8 @@ class SignalingClient {
     this.handlers = { ...this.handlers, ...handlers };
   }
 
-  private startHeartbeat() {
-    this.stopHeartbeat();
-
-    this.heartbeatTimer = setInterval(() => {
-      const now = Date.now();
-
-      // If no pong received within the timeout window, the connection is stale.
-      if (now - this.lastPongReceived > this.HEARTBEAT_TIMEOUT) {
-        log('[heartbeat]', null, 'no pong received, closing stale WebSocket', {
-          instanceId: this.instanceId,
-          lastPongReceived: this.lastPongReceived,
-          now,
-          timeoutMs: this.HEARTBEAT_TIMEOUT,
-        });
-        this.ws?.close(1000, 'heartbeat timeout');
-        return;
-      }
-
-      this.ws?.send(JSON.stringify({ type: 'PING', timestamp: now }));
-    }, this.HEARTBEAT_INTERVAL);
-  }
-
-  private stopHeartbeat() {
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
-    if (this.heartbeatTimeoutTimer) {
-      clearTimeout(this.heartbeatTimeoutTimer);
-      this.heartbeatTimeoutTimer = null;
-    }
-  }
-
-  isHealthy(): boolean {
-    return (
-      this.isConnected() &&
-      Date.now() - this.lastPongReceived <= this.HEARTBEAT_TIMEOUT
-    );
-  }
-
   disconnect() {
     this.shouldReconnect = false;
-    this.stopHeartbeat();
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
@@ -350,6 +359,9 @@ class SignalingClient {
       this.ws = null;
     }
     this.setState('disconnected');
+    this.authPending = false;
+    this.authPromiseResolve = null;
+    this.authPromiseReject = null;
   }
 
   async reconnect(token?: string): Promise<void> {
@@ -358,17 +370,15 @@ class SignalingClient {
       attempt: this.reconnectAttempts + 1,
     });
     this.shouldReconnect = true;
-    this.stopHeartbeat();
+    this.authPending = false;
+    this.authPromiseResolve = null;
+    this.authPromiseReject = null;
     if (this.ws) {
       this.ws.close();
       this.ws = null;
     }
     this.setState('disconnected');
     await this.connect(token);
-    const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
-    if (effectiveToken) {
-      await this.authenticate(effectiveToken);
-    }
   }
 }
 
