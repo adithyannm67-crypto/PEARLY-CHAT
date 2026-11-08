@@ -4,13 +4,15 @@ import { isConversationParticipant } from "#services/chatService.js";
 
 const MAX_PAYLOAD_SIZE = 64 * 1024;
 const MAX_PARTICIPANTS = 2;
+const HEARTBEAT_INTERVAL = 30000;
+const HEARTBEAT_TIMEOUT = 5000;
 
 // conversationId -> { sockets: Set<WebSocket>, participants: Map<userId, Set<WebSocket>> }
 const rooms = new Map();
 
 // conversationId + type + senderId + payload hash -> timestamp
 const signalingCache = new Map();
-const SIGNALING_CACHE_TTL = 30 * 1000;
+const SIGNALING_CACHE_TTL = 1000;
 
 function signalingKey(conversationId, type, senderId, payload) {
   let hash = "";
@@ -47,7 +49,11 @@ function getRoom(conversationId) {
 function send(socket, payload) {
   if (socket.readyState === WebSocket.OPEN) {
     console.log("[ws] send:", payload.type, JSON.stringify(payload).slice(0, 120));
-    socket.send(JSON.stringify(payload));
+    try {
+      socket.send(JSON.stringify(payload));
+    } catch (err) {
+      console.error("[ws] send failed:", err);
+    }
   }
 }
 
@@ -112,13 +118,17 @@ function removeSocketFromRoom(socket, conversationId) {
   socket.rooms.delete(conversationId);
 
   if (socket.userId) {
-    const others = [...room.sockets].filter((s) => s.userId !== socket.userId);
-    for (const other of others) {
-      send(other, {
-        type: "PEER_LEFT",
-        conversationId,
-        userId: socket.userId,
-      });
+    const userSockets = room.participants.get(socket.userId);
+    const userFullyLeft = !userSockets || userSockets.size === 0;
+    if (userFullyLeft) {
+      const others = [...room.sockets].filter((s) => s.userId !== socket.userId);
+      for (const other of others) {
+        send(other, {
+          type: "PEER_LEFT",
+          conversationId,
+          userId: socket.userId,
+        });
+      }
     }
   }
 
@@ -191,6 +201,14 @@ async function handleJoinRoom(socket, payload) {
   }
 
   const alreadyJoined = socket.rooms.has(conversationId);
+
+  // One active room per socket: leave any previous room before joining a new one.
+  // This keeps getSignalingRoom() unambiguous.
+  for (const prevRoomId of [...socket.rooms]) {
+    if (prevRoomId !== conversationId) {
+      removeSocketFromRoom(socket, prevRoomId);
+    }
+  }
 
   room.sockets.add(socket);
   if (!room.participants.has(socket.userId)) {
@@ -341,6 +359,9 @@ console.log("[signaling] message:", type);
     }
 
     switch (type) {
+      case "PING":
+        send(socket, { type: "PONG", timestamp: payload.timestamp });
+        return;
       case "JOIN_ROOM":
         await handleJoinRoom(socket, payload);
         break;
@@ -366,18 +387,68 @@ console.log("[signaling] message:", type);
 }
 
 export function setupSignaling(wss) {
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((socket) => {
+      if (socket.isAlive === false) {
+        console.log(
+          `[ws] heartbeat close instanceId=${socket.instanceId} userId=${socket.userId} readyState=${socket.readyState}`
+        );
+        socket.close(1000, "heartbeat timeout");
+        return;
+      }
+      socket.isAlive = false;
+      socket.ping();
+
+      // Per-socket pong timeout: if no pong within HEARTBEAT_TIMEOUT,
+      // close immediately instead of waiting for the next interval.
+      if (socket.pongTimeout) {
+        clearTimeout(socket.pongTimeout);
+      }
+      socket.pongTimeout = setTimeout(() => {
+        if (socket.isAlive === false) {
+          console.log(
+            `[ws] pong timeout close instanceId=${socket.instanceId} userId=${socket.userId} readyState=${socket.readyState}`
+          );
+          socket.close(1000, "heartbeat timeout");
+        }
+      }, HEARTBEAT_TIMEOUT);
+    });
+  }, HEARTBEAT_INTERVAL);
+
+  wss.on("close", () => {
+    clearInterval(heartbeatInterval);
+  });
+
   wss.on("connection", (socket, request) => {
     socket.userId = null;
     socket.accessToken = null;
     socket.authenticated = false;
     socket.rooms = new Set();
+    socket.isAlive = true;
+    socket.instanceId = crypto.randomUUID();
+
+    socket.on("pong", () => {
+      socket.isAlive = true;
+      if (socket.pongTimeout) {
+        clearTimeout(socket.pongTimeout);
+        socket.pongTimeout = null;
+      }
+    });
+
+    console.log(
+      `[ws] connection instanceId=${socket.instanceId} readyState=${socket.readyState} url=${request.url}`
+    );
 
     (async () => {
       try {
         const token = extractToken(request);
-        if (token && !socket.authenticated) {
+        if (token && !socket.authenticated && socket.readyState === WebSocket.OPEN) {
           const user = await authenticateUser(token);
-          if (user && !socket.authenticated) {
+          if (
+            user &&
+            !socket.authenticated &&
+            socket.readyState === WebSocket.OPEN
+          ) {
             socket.userId = user.id;
             socket.accessToken = token;
             socket.authenticated = true;
@@ -400,12 +471,24 @@ export function setupSignaling(wss) {
       });
     });
 
-    socket.on("close", () => {
+    socket.on("close", (code, reason) => {
+      if (socket.pongTimeout) {
+        clearTimeout(socket.pongTimeout);
+        socket.pongTimeout = null;
+      }
+      console.log(
+        `[ws] close instanceId=${socket.instanceId} code=${code} reason=${reason} userId=${socket.userId} readyState=${socket.readyState} rooms=${JSON.stringify(
+          [...socket.rooms]
+        )}`
+      );
       handleClose(socket);
     });
 
-    socket.on("error", () => {
-      handleClose(socket);
+    socket.on("error", (err) => {
+      console.error(
+        `[ws] error instanceId=${socket.instanceId} userId=${socket.userId}`,
+        err
+      );
     });
   });
 }

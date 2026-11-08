@@ -28,7 +28,7 @@ function getDateKey(ts: string): string {
 }
 
 function formatDateLabel(dateString: string): string {
-  const dateKey= getDateKey(dateString);
+  const dateKey = getDateKey(dateString);
   if (!dateKey) return '';
   const [yearStr, monthStr, dayStr] = dateKey.split('-');
   const targetDate = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
@@ -59,7 +59,12 @@ function formatMessageTime(ts: string): string {
 }
 
 export default function ChatArea() {
-  const { userId, selectedConversation, handleBack, onlineUsers } = useDashboard();
+  const { userId, selectedConversation, handleBack, onlineUsers, webrtcConnectionState,
+    isDataChannelOpen,
+    webrtcMessages,
+    connectWebRTC,
+    disconnectWebRTC,
+    sendWebRTCMessage, } = useDashboard();
   const [messageInput, setMessageInput] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,17 +73,17 @@ export default function ChatArea() {
 
   const selectedConversationId = selectedConversation?.id ?? null;
 
-  const {
-    connectionState: webrtcConnectionState,
-    isDataChannelOpen,
-    messages: webrtcMessages,
-    connect: connectWebRTC,
-    disconnect: disconnectWebRTC,
-    sendMessage: sendWebRTCMessage,
-  } = useWebRTC({
-    conversationId: selectedConversationId,
-    userId,
-  });
+  // const {
+  //   connectionState: webrtcConnectionState,
+  //   isDataChannelOpen,
+  //   messages: webrtcMessages,
+  //   connect: connectWebRTC,
+  //   disconnect: disconnectWebRTC,
+  //   sendMessage: sendWebRTCMessage,
+  // } = useWebRTC({
+  //   conversationId: selectedConversationId,
+  //   userId,
+  // });
 
   // Connect/disconnect WebRTC when conversation changes
   useEffect(() => {
@@ -311,22 +316,19 @@ export default function ChatArea() {
 
               {/* Message row */}
               <div
-                className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'} ${
-                  isFirstInGroup ? 'mt-3' : 'mt-1'
-                }`}
+                className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-3' : 'mt-1'
+                  }`}
               >
                 <div
-                  className={`flex flex-col ${
-                    isSent ? 'items-end' : 'items-start'
-                  } max-w-[70%]`}
+                  className={`flex flex-col ${isSent ? 'items-end' : 'items-start'
+                    } max-w-[70%]`}
                 >
                   {/* Bubble */}
                   <div
-                    className={`px-4 py-2 w-fit break-words text-sm leading-relaxed ${
-                      isSent
-                        ? 'bg-primary text-white rounded-2xl rounded-br-sm'
-                        : 'bg-surface text-text-primary rounded-2xl rounded-bl-sm'
-                    }`}
+                    className={`px-4 py-2 w-fit break-words text-sm leading-relaxed ${isSent
+                      ? 'bg-primary text-white rounded-2xl rounded-br-sm'
+                      : 'bg-surface text-text-primary rounded-2xl rounded-bl-sm'
+                      }`}
                   >
                     {msg.content}
                   </div>
@@ -338,11 +340,10 @@ export default function ChatArea() {
                     </span>
                     {isSent && (
                       <span
-                        className={`text-[10px] ${
-                          msg.status === 'read'
-                            ? 'text-primary'
-                            : 'text-text-secondary/50'
-                        }`}
+                        className={`text-[10px] ${msg.status === 'read'
+                          ? 'text-primary'
+                          : 'text-text-secondary/50'
+                          }`}
                       >
                         {msg.status === 'sent' ? '✓' : '✓✓'}
                       </span>
@@ -405,11 +406,10 @@ export default function ChatArea() {
               !messageInput.trim() || !isDataChannelOpen || !userId
             }
             aria-label="Send message"
-            className={`p-2.5 rounded-full transition-all ${
-              messageInput.trim() && isDataChannelOpen && userId
-                ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
-                : 'bg-surface text-text-secondary cursor-not-allowed'
-            }`}
+            className={`p-2.5 rounded-full transition-all ${messageInput.trim() && isDataChannelOpen && userId
+              ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
+              : 'bg-surface text-text-secondary cursor-not-allowed'
+              }`}
           >
             <SendHorizontal size={18} />
           </button>

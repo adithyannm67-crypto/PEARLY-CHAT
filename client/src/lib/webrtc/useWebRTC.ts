@@ -14,7 +14,7 @@ import { fetchIceServers } from './iceServers';
 import type { IceServer } from './iceServers';
 import { log } from './logger';
 
-type ConnectionStatus =
+    type ConnectionStatus =
   | 'disconnected'
   | 'connecting'
   | 'waiting-for-peer'
@@ -257,7 +257,8 @@ export function useWebRTC({
     });
 
     return () => {
-      client.disconnect();
+      // The shared signaling WebSocket stays alive across unmounts (conversation
+      // switches, navigation, tab changes). Only WebRTC resources are cleaned up.
       manager.close();
       channelMgr.close();
       signalingClientRef.current = null;
@@ -295,7 +296,6 @@ export function useWebRTC({
       }
 
       await client.connect(token);
-      await client.authenticate(token);
 
       // Fetch ICE server configuration from backend (includes temporary TURN credentials)
       const iceServers = await fetchIceServers();

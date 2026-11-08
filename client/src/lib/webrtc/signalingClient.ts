@@ -50,9 +50,15 @@ class SignalingClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isConnecting = false;
   private shouldReconnect = true;
+  private readonly instanceId: string;
+  private connectionGeneration = 0;
+  private authPending = false;
+  private authPromiseResolve: ((userId: string) => void) | null = null;
+  private authPromiseReject: ((err: Error) => void) | null = null;
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
+    this.instanceId = crypto.randomUUID();
     const wsUrl = SERVER_URL!.replace(/^http(?=s?)/, 'ws');
     this.url = `${wsUrl}`;
   }
@@ -98,10 +104,54 @@ class SignalingClient {
 
         ws.onopen = () => {
           this.isConnecting = false;
+          const gen = ++this.connectionGeneration;
           this.reconnectAttempts = 0;
           this.setState('connected');
           this.handlers.onConnect?.();
-          resolve();
+          log('[WS]', null, 'WebSocket opened', {
+            instanceId: this.instanceId,
+            generation: gen,
+            readyState: ws.readyState,
+            url: this.url,
+          });
+
+          // Send AUTH exactly once per connection using the token from the query string.
+          // The server authenticates via the URL token and replies with AUTHENTICATED.
+          this.authPending = true;
+          this.ws?.send(
+            JSON.stringify({ type: 'AUTH', token: effectiveToken ?? '' }),
+          );
+
+          return new Promise<void>((authResolve, authReject) => {
+            const authTimeout = setTimeout(() => {
+              if (this.authPending) {
+                this.authPending = false;
+                this.authPromiseResolve = null;
+                this.authPromiseReject = null;
+                authReject(new Error('Authentication timeout'));
+              }
+            }, 10000);
+            this.authPromiseResolve = (userId: string) => {
+              clearTimeout(authTimeout);
+              this.authPending = false;
+              this.authPromiseResolve = null;
+              this.authPromiseReject = null;
+              authResolve();
+            };
+            this.authPromiseReject = (err: Error) => {
+              clearTimeout(authTimeout);
+              this.authPending = false;
+              this.authPromiseResolve = null;
+              this.authPromiseReject = null;
+              authReject(err);
+            };
+          }).then(() => {
+            log('[WS]', null, 'authenticated via WebSocket', {
+              instanceId: this.instanceId,
+              generation: gen,
+            });
+            resolve();
+          });
         };
 
         ws.onmessage = (event) => {
@@ -125,10 +175,32 @@ class SignalingClient {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
+          // Only the current connection generation may update shared state.
+          // A delayed close from an older connection is ignored.
+          if (this.ws !== ws) {
+            return;
+          }
           this.ws = null;
           if (this.state !== 'disconnected') {
             this.setState('disconnected');
+            log('[WS]', null, 'WebSocket closed', {
+              instanceId: this.instanceId,
+              code: event.code,
+              reason: event.reason,
+              wasClean: event.wasClean,
+              reconnectAttempts: this.reconnectAttempts,
+              shouldReconnect: this.shouldReconnect,
+            });
+            // Reject pending auth if any.
+            if (this.authPromiseReject) {
+              this.authPromiseReject(
+                new Error(`WebSocket closed: ${event.code} ${event.reason}`),
+              );
+              this.authPromiseReject = null;
+              this.authPromiseResolve = null;
+              this.authPending = false;
+            }
             this.handlers.onDisconnect?.();
             if (this.shouldReconnect) {
               this.scheduleReconnect();
@@ -137,6 +209,10 @@ class SignalingClient {
         };
 
         ws.onerror = (err) => {
+          log('[WS]', null, 'WebSocket error', {
+            instanceId: this.instanceId,
+            readyState: this.ws?.readyState,
+          });
           console.error('[signaling] WebSocket error:', err);
           this.setState('failed');
           this.handlers.onError?.('CONNECTION_ERROR', 'WebSocket connection failed');
@@ -163,6 +239,12 @@ class SignalingClient {
     this.setState('reconnecting');
 
     const delay = Math.min(1000 * this.reconnectAttempts, 30000);
+    log('[WS]', null, 'scheduling reconnect', {
+      instanceId: this.instanceId,
+      attempt: this.reconnectAttempts,
+      delayMs: delay,
+      maxAttempts: this.maxReconnectAttempts,
+    });
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
       void this.connect();
@@ -172,6 +254,12 @@ class SignalingClient {
   private handleMessage(message: SignalingEvent) {
     switch (message.type) {
       case 'AUTHENTICATED':
+        if (this.authPending && this.authPromiseResolve) {
+          this.authPending = false;
+          this.authPromiseResolve(message.userId);
+          this.authPromiseResolve = null;
+          this.authPromiseReject = null;
+        }
         this.handlers.onAuthenticated?.(message.userId);
         break;
       case 'ROOM_JOINED':
@@ -216,11 +304,10 @@ class SignalingClient {
   }
 
   async authenticate(token?: string): Promise<boolean> {
-    const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
-    if (!effectiveToken) {
-      return false;
-    }
-    return this.send({ type: 'AUTH', token: effectiveToken });
+    // Authentication is performed inside connect() immediately after the
+    // WebSocket opens. This method is a no-op status check kept for API
+    // compatibility with callers that invoke it after connect().
+    return this.isConnected() && !this.authPending;
   }
 
   joinRoom(conversationId: string): boolean {
@@ -272,6 +359,26 @@ class SignalingClient {
       this.ws = null;
     }
     this.setState('disconnected');
+    this.authPending = false;
+    this.authPromiseResolve = null;
+    this.authPromiseReject = null;
+  }
+
+  async reconnect(token?: string): Promise<void> {
+    log('[WS]', null, 'reconnecting WebSocket', {
+      instanceId: this.instanceId,
+      attempt: this.reconnectAttempts + 1,
+    });
+    this.shouldReconnect = true;
+    this.authPending = false;
+    this.authPromiseResolve = null;
+    this.authPromiseReject = null;
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.setState('disconnected');
+    await this.connect(token);
   }
 }
 
