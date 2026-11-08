@@ -36,9 +36,23 @@ type SignalingHandlers = {
   onError?: (code: string, message: string) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
+  onReconnecting?: (attempt: number, maxAttempts: number) => void;
+  onReconnectFailed?: () => void;
+  onReconnected?: () => void;
 };
 
 type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'reconnecting' | 'failed';
+
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 30000;
+
+function jitteredBackoff(attempt: number): number {
+  const exponential = Math.min(BASE_BACKOFF_MS * Math.pow(2, attempt - 1), MAX_BACKOFF_MS);
+  // Add jitter: random value between 0 and 25% of the delay
+  const jitter = Math.random() * exponential * 0.25;
+  return Math.floor(exponential + jitter);
+}
 
 class SignalingClient {
   private ws: WebSocket | null = null;
@@ -46,7 +60,7 @@ class SignalingClient {
   private handlers: SignalingHandlers = {};
   private state: ConnectionState = 'disconnected';
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private maxReconnectAttempts = MAX_RECONNECT_ATTEMPTS;
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isConnecting = false;
   private shouldReconnect = true;
@@ -55,6 +69,7 @@ class SignalingClient {
   private authPending = false;
   private authPromiseResolve: ((userId: string) => void) | null = null;
   private authPromiseReject: ((err: Error) => void) | null = null;
+  private isManualReconnect = false;
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
@@ -114,6 +129,11 @@ class SignalingClient {
             readyState: ws.readyState,
             url: this.url,
           });
+
+          if (this.isManualReconnect) {
+            this.handlers.onReconnected?.();
+            this.isManualReconnect = false;
+          }
 
           // Send AUTH exactly once per connection using the token from the query string.
           // The server authenticates via the URL token and replies with AUTHENTICATED.
@@ -232,13 +252,15 @@ class SignalingClient {
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.setState('failed');
+      this.handlers.onReconnectFailed?.();
       return;
     }
 
     this.reconnectAttempts += 1;
     this.setState('reconnecting');
+    this.handlers.onReconnecting?.(this.reconnectAttempts, this.maxReconnectAttempts);
 
-    const delay = Math.min(1000 * this.reconnectAttempts, 30000);
+    const delay = jitteredBackoff(this.reconnectAttempts);
     log('[WS]', null, 'scheduling reconnect', {
       instanceId: this.instanceId,
       attempt: this.reconnectAttempts,
@@ -370,6 +392,7 @@ class SignalingClient {
       attempt: this.reconnectAttempts + 1,
     });
     this.shouldReconnect = true;
+    this.isManualReconnect = true;
     this.authPending = false;
     this.authPromiseResolve = null;
     this.authPromiseReject = null;

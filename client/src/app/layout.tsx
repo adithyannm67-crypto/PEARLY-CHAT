@@ -29,6 +29,8 @@ export const viewport = {
 
 import { AuthProvider } from '@/context/AuthProvider';
 import OfflineBanner from '@/components/OfflineBanner';
+import { NotificationProvider } from '@/context/NotificationContext';
+import NotificationCenter from '@/components/NotificationCenter';
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -37,8 +39,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="h-full bg-bg-main text-text-primary font-sans no-pull-to-refresh">
-        <AuthProvider>{children}</AuthProvider>
-        {/* <OfflineBanner /> */}
+        <NotificationProvider>
+          <AuthProvider>{children}</AuthProvider>
+          <OfflineBanner />
+          <NotificationCenter />
+        </NotificationProvider>
       </body>
     </html>
   );

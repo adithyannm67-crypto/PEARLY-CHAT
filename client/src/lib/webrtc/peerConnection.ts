@@ -1,6 +1,6 @@
 import { getSignalingClient } from "./signalingClient";
 import { log } from "./logger";
-import { fetchIceServers } from "./iceServers";
+import { fetchIceServers, hasTurnCredentials } from "./iceServers";
 import type { IceServer } from "./iceServers";
 
 type RTCIceInitLocal = {
@@ -25,6 +25,7 @@ type PeerConnectionHandlers = {
   onStateChange?: (state: PeerConnectionState) => void;
   onDataChannel?: (channel: RTCDataChannel) => void;
   onError?: (error: string) => void;
+  onIceRestartStart?: () => void;
 };
 
 class PeerConnectionManager {
@@ -41,6 +42,11 @@ class PeerConnectionManager {
 
   // ICE restart state
   private isRestartingIce = false;
+
+  // ICE restart failure recovery
+  private iceRestartAttempts = 0;
+  private maxIceRestartAttempts = 3;
+  private isReinitializing = false;
 
   private handlers: PeerConnectionHandlers = {};
   private state: PeerConnectionState = "new";
@@ -691,6 +697,9 @@ class PeerConnectionManager {
    *
    * Duplicate restart attempts are prevented via the isRestartingIce flag.
    * Restart state is cleaned up after success or failure.
+   *
+   * If ICE restart fails repeatedly (maxIceRestartAttempts), a fresh peer
+   * connection is created as a last-resort recovery mechanism.
    */
   async restartIce(): Promise<void> {
     if (this.isRestartingIce) {
@@ -712,7 +721,18 @@ class PeerConnectionManager {
     }
 
     this.isRestartingIce = true;
+    this.handlers.onIceRestartStart?.();
     log("[ICE-RESTART]", this.conversationId, "starting ICE restart");
+
+    // Verify TURN credentials are available for NAT traversal
+    const iceServers = await fetchIceServers();
+    if (!hasTurnCredentials(iceServers)) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "WARNING: No TURN credentials available. ICE restart may fail for clients behind symmetric NAT.",
+      );
+    }
 
     try {
       await this.pc.restartIce();
@@ -743,15 +763,94 @@ class PeerConnectionManager {
       // remote peer can respond with a new answer.
       await this.sendOfferViaSignaling(offerSdp);
       log("[ICE-RESTART]", this.conversationId, "ICE restart offer sent via signaling");
+
+      // Success — reset the failure counter
+      this.iceRestartAttempts = 0;
     } catch (err) {
+      this.iceRestartAttempts += 1;
       log(
         "[ICE-RESTART]",
         this.conversationId,
         "ICE restart failed",
-        { error: err instanceof Error ? err.message : String(err) },
+        { error: err instanceof Error ? err.message : String(err), attempt: this.iceRestartAttempts },
       );
+
+      if (this.iceRestartAttempts >= this.maxIceRestartAttempts) {
+        log(
+          "[ICE-RESTART]",
+          this.conversationId,
+          "ICE restart max attempts reached, attempting fresh peer connection",
+        );
+        await this.reinitializePeerConnection();
+      }
     } finally {
       this.isRestartingIce = false;
+    }
+  }
+
+  /**
+   * Reinitialize the peer connection as a last-resort recovery when ICE
+   * restart has failed repeatedly. Creates a brand new RTCPeerConnection
+   * and renegotiates from scratch.
+   */
+  private async reinitializePeerConnection(): Promise<void> {
+    if (this.isReinitializing) {
+      log("[ICE-RESTART]", this.conversationId, "reinitialization already in progress, skipping");
+      return;
+    }
+
+    this.isReinitializing = true;
+    log("[ICE-RESTART]", this.conversationId, "reinitializing peer connection");
+
+    try {
+      // Close the existing broken connection
+      this.close();
+
+      // Create a fresh peer connection
+      const resolvedIceServers = await fetchIceServers();
+      this.pc = this.createPeerConnection(resolvedIceServers);
+
+      // Set up negotiation handler
+      this.pc.onnegotiationneeded = async () => {
+        log("[NEGOTIATION-NEEDED]", this.conversationId, "onnegotiationneeded fired (reinit)");
+        if (this.isSettingRemoteAnswerPending) {
+          return;
+        }
+        await this.negotiate();
+      };
+
+      // Create data channel if we were the owner
+      if (this.dataChannelOwner) {
+        this.dataChannel = this.pc.createDataChannel("chat", {
+          negotiated: false,
+          ordered: true,
+        });
+        this.handlers.onDataChannel?.(this.dataChannel);
+      }
+
+      // Reset negotiation state
+      this.makingOffer = false;
+      this.ignoreOffer = false;
+      this.isSettingRemoteAnswerPending = false;
+      this.remoteDescriptionSet = false;
+      this.iceCandidateQueue = [];
+
+      // Start fresh negotiation
+      await this.negotiate();
+
+      log("[ICE-RESTART]", this.conversationId, "peer connection reinitialized successfully");
+      this.iceRestartAttempts = 0;
+    } catch (err) {
+      log(
+        "[ICE-RESTART]",
+        this.conversationId,
+        "peer connection reinitialization failed",
+        { error: err instanceof Error ? err.message : String(err) },
+      );
+      this.setState("failed");
+      this.handlers.onError?.("PEER_CONNECTION_FAILED");
+    } finally {
+      this.isReinitializing = false;
     }
   }
 

@@ -101,6 +101,8 @@ interface DashboardContextValue {
   connectWebRTC: () => Promise<void>;
   disconnectWebRTC: () => void;
   sendWebRTCMessage: (content: string) => Promise<boolean>;
+  reconnectWebRTC: () => Promise<void>;
+  iceRestartFailed: boolean;
 
 
 }
@@ -163,6 +165,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     connect: connectWebRTC,
     disconnect: disconnectWebRTC,
     sendMessage: sendWebRTCMessage,
+    reconnect: reconnectWebRTC,
+    iceRestartFailed,
   } = useWebRTC({
     conversationId: selectedConversationId,
     userId,
@@ -372,6 +376,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       connectWebRTC,
       disconnectWebRTC,
       sendWebRTCMessage,
+      reconnectWebRTC,
+      iceRestartFailed,
     }),
     [
       session,
@@ -432,13 +438,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       selectedConversation,
       sessionName,
 
-
       webrtcConnectionState,
       isDataChannelOpen,
       webrtcMessages,
       connectWebRTC,
       disconnectWebRTC,
       sendWebRTCMessage,
+      reconnectWebRTC,
+      iceRestartFailed,
     ]
   );
 

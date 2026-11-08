@@ -33,3 +33,9 @@ async function fetchIceServers(): Promise<IceServer[]> {
 
 export type { IceServer };
 export { fetchIceServers };
+
+export function hasTurnCredentials(iceServers: IceServer[]): boolean {
+  return iceServers.some(
+    (s) => s.username && s.credential && s.username.length > 0 && s.credential.length > 0,
+  );
+}

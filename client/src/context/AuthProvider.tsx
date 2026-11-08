@@ -5,6 +5,7 @@ import { type SupabaseClient, type User } from '@supabase/supabase-js';
 import { supabase as browserSupabase } from '@/lib/supabase/client';
 import { requireSupabaseEnv } from '@/lib/supabase/client';
 import { authFetch } from '@/lib/authFetch';
+import { useNotifications } from '@/context/NotificationContext';
 
 type Session = {
   user: User | null;
@@ -39,6 +40,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const { addNotification } = useNotifications();
 
   useEffect(() => {
     try {
@@ -91,6 +93,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     const { error, data } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      addNotification({
+        type: 'error',
+        title: 'Sign-in failed',
+        message: error.message.includes('Invalid login') ? 'Invalid email or password.' : 'Unable to sign in. Please try again.',
+        persistent: false,
+      });
+    }
     return { error, data };
   };
 
@@ -100,6 +110,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       password,
       options: { data: { name, username } },
     });
+    if (error) {
+      addNotification({
+        type: 'error',
+        title: 'Sign-up failed',
+        message: error.message.includes('already registered') ? 'An account with this email already exists.' : 'Unable to create account. Please try again.',
+        persistent: false,
+      });
+    }
     return { error, data };
   };
 
@@ -107,6 +125,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL
 
     if(!serverUrl) {
+      addNotification({
+        type: 'error',
+        title: 'Configuration error',
+        message: 'Server URL is not configured.',
+        persistent: true,
+      });
       throw new Error("NEXT_PUBLIC_SERVER_URL is not defined");
     }
 
@@ -116,10 +140,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         credentials: 'include',
       });
     } catch {
+      addNotification({
+        type: 'warning',
+        title: 'Sign-out failed',
+        message: 'Unable to sign out from the server. Your local session has been cleared.',
+        persistent: false,
+      });
       // Local session is still cleared if the server is unreachable.
     }
 
     const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (error) {
+      addNotification({
+        type: 'warning',
+        title: 'Session expired',
+        message: 'Your session has expired. Please sign in again.',
+        persistent: false,
+      });
+    }
     return { error };
   };
 

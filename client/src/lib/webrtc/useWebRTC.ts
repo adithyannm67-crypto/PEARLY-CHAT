@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSupabase } from '@/context/AuthProvider';
 import { authFetch } from '@/lib/authFetch';
+import { useNotifications } from '@/context/NotificationContext';
 import { getSignalingClient } from './signalingClient';
 import {
   getPeerConnectionManager,
@@ -37,6 +38,8 @@ type UseWebRTCReturn = {
   disconnect: () => void;
   sendMessage: (content: string) => Promise<boolean>;
   peerConnectionState: PeerConnectionState;
+  reconnect: () => Promise<void>;
+  iceRestartFailed: boolean;
 };
 
 export function useWebRTC({
@@ -50,8 +53,11 @@ export function useWebRTC({
     useState<PeerConnectionState>('new');
   const [isDataChannelOpen, setIsDataChannelOpen] = useState(false);
   const [messages, setMessages] = useState<DataChannelMessage[]>([]);
+  const [iceRestartFailed, setIceRestartFailed] = useState(false);
+  const iceRestartInProgressRef = useRef(false);
 
   const { session: authSession, supabase } = useSupabase();
+  const { addNotification } = useNotifications();
 
   const signalingClientRef = useRef<ReturnType<typeof getSignalingClient>>(
     null,
@@ -94,6 +100,12 @@ export function useWebRTC({
     },
     [],
   );
+
+  const reconnect = useCallback(async () => {
+    const client = signalingClientRef.current;
+    if (!client) return;
+    await client.reconnect();
+  }, []);
 
   useEffect(() => {
     const client = getSignalingClient();
@@ -225,6 +237,40 @@ export function useWebRTC({
       onDisconnect: () => {
         setConnectionState('disconnected');
       },
+      onReconnecting: (attempt, maxAttempts) => {
+        log('[WS]', null, 'reconnecting', { attempt, maxAttempts });
+        setConnectionState('reconnecting');
+        addNotification({
+          type: 'warning',
+          title: 'Reconnecting...',
+          message: `Attempt ${attempt} of ${maxAttempts}. Please wait.`,
+          persistent: attempt >= maxAttempts,
+        });
+      },
+      onReconnectFailed: () => {
+        log('[WS]', null, 'reconnection failed');
+        setConnectionState('failed');
+        addNotification({
+          type: 'error',
+          title: 'Reconnection failed.',
+          message: 'Unable to reconnect. Please try again.',
+          persistent: true,
+          retry: () => {
+            void reconnect();
+          },
+        });
+      },
+      onReconnected: () => {
+        log('[WS]', null, 'reconnected');
+        setConnectionState('connected');
+        addNotification({
+          type: 'success',
+          title: 'Connection restored.',
+          message: 'You are back online.',
+          persistent: false,
+          duration: 3000,
+        });
+      },
     });
 
     manager.setHandlers({
@@ -232,8 +278,13 @@ export function useWebRTC({
         setPeerConnectionState(state);
         if (state === 'connected') {
           setConnectionState('connected');
+          setIceRestartFailed(false);
+          iceRestartInProgressRef.current = false;
         } else if (state === 'failed') {
           setConnectionState('failed');
+          if (iceRestartInProgressRef.current) {
+            setIceRestartFailed(true);
+          }
         } else if (state === 'disconnected') {
           setConnectionState('disconnected');
         }
@@ -244,6 +295,21 @@ export function useWebRTC({
       onError: (error) => {
         log('[webrtc]', null, 'peer connection error', error);
         setConnectionState('failed');
+        if (iceRestartInProgressRef.current) {
+          setIceRestartFailed(true);
+          addNotification({
+            type: 'error',
+            title: 'Unable to restore the connection.',
+            message: 'ICE restart failed. Please try connecting again.',
+            persistent: true,
+            retry: () => {
+              void reconnect();
+            },
+          });
+        }
+      },
+      onIceRestartStart: () => {
+        iceRestartInProgressRef.current = true;
       },
     });
 
@@ -394,7 +460,9 @@ export function useWebRTC({
     messages,
     connect,
     disconnect,
+    reconnect,
     sendMessage,
+    iceRestartFailed,
   };
 }
 
