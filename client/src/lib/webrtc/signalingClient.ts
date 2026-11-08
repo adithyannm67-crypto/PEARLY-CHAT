@@ -321,6 +321,21 @@ class SignalingClient {
     }
     this.setState('disconnected');
   }
+
+  async reconnect(token?: string): Promise<void> {
+    this.shouldReconnect = true;
+    this.stopHeartbeat();
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.setState('disconnected');
+    await this.connect(token);
+    const effectiveToken = token ?? (await supabase.auth.getSession()).data.session?.access_token;
+    if (effectiveToken) {
+      await this.authenticate(effectiveToken);
+    }
+  }
 }
 
 let clientInstance: SignalingClient | null = null;
