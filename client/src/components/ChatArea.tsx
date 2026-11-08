@@ -145,19 +145,32 @@ export default function ChatArea() {
     };
   }, [selectedConversationId]);
 
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  // Scroll to bottom when a conversation is opened
+  useEffect(() => {
+    if (!selectedConversationId) return;
+
+    isUserScrollingRef.current = false;
+    const timer = setTimeout(scrollToBottom, 50);
+    return () => clearTimeout(timer);
+  }, [selectedConversationId, scrollToBottom]);
+
   // Scroll to bottom when new messages arrive (only if user is near bottom)
   useEffect(() => {
-    if (messageAreaRef.current && !isUserScrollingRef.current) {
-      const area = messageAreaRef.current;
-      const isNearBottom =
-        area.scrollHeight - area.scrollTop - area.clientHeight < 100;
-      if (isNearBottom) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        setScrollToBottomVisible(true);
-      }
+    if (!messageAreaRef.current || isUserScrollingRef.current) return;
+
+    const area = messageAreaRef.current;
+    const isNearBottom =
+      area.scrollHeight - area.scrollTop - area.clientHeight < 100;
+    if (isNearBottom) {
+      scrollToBottom();
+    } else {
+      setScrollToBottomVisible(true);
     }
-  }, [localMessages]);
+  }, [localMessages, isUserScrollingRef, scrollToBottom]);
 
   const handleScroll = useCallback(() => {
     const area = messageAreaRef.current;
@@ -196,6 +209,8 @@ export default function ChatArea() {
         status: 'sending',
       };
 
+      // User is actively sending — ensure we scroll to bottom to show it.
+      isUserScrollingRef.current = false;
       setLocalMessages((prev) => [...prev, optimistic]);
 
       void (async () => {
