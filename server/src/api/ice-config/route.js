@@ -29,7 +29,7 @@ export default async function handler(req) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
 
-  console.log("======ICE CONFIG=====", accountSid,"   ", authToken);
+  console.log("[ice-config] Twilio credentials configured:", Boolean(accountSid && authToken));
   if (!accountSid || !authToken) {
     throw new HttpError(500, "Twilio credentials not configured on server");
   }

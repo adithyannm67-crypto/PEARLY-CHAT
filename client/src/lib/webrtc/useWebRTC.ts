@@ -259,11 +259,14 @@ export function useWebRTC({
     return () => {
       // The shared signaling WebSocket stays alive across unmounts (conversation
       // switches, navigation, tab changes). Only WebRTC resources are cleaned up.
+      // Do NOT null the signaling client — it is a shared singleton used by all
+      // conversations and tabs. Nulling it here would break signaling for other
+      // active conversations.
       manager.close();
       channelMgr.close();
-      signalingClientRef.current = null;
       peerManagerRef.current = null;
       dataChannelRef.current = null;
+      // Intentionally do NOT set signalingClientRef.current = null.
     };
   }, [addMessage]);
 
