@@ -4,6 +4,8 @@ import { isConversationParticipant } from "#services/chatService.js";
 
 const MAX_PAYLOAD_SIZE = 64 * 1024;
 const MAX_PARTICIPANTS = 2;
+const HEARTBEAT_INTERVAL = 30000;
+const HEARTBEAT_TIMEOUT = 5000;
 
 // conversationId -> { sockets: Set<WebSocket>, participants: Map<userId, Set<WebSocket>> }
 const rooms = new Map();
@@ -366,11 +368,31 @@ console.log("[signaling] message:", type);
 }
 
 export function setupSignaling(wss) {
+  const heartbeatInterval = setInterval(() => {
+    wss.clients.forEach((socket) => {
+      if (socket.isAlive === false) {
+        socket.terminate();
+        return;
+      }
+      socket.isAlive = false;
+      socket.ping();
+    });
+  }, HEARTBEAT_INTERVAL);
+
+  wss.on("close", () => {
+    clearInterval(heartbeatInterval);
+  });
+
   wss.on("connection", (socket, request) => {
     socket.userId = null;
     socket.accessToken = null;
     socket.authenticated = false;
     socket.rooms = new Set();
+    socket.isAlive = true;
+
+    socket.on("pong", () => {
+      socket.isAlive = true;
+    });
 
     (async () => {
       try {
@@ -400,7 +422,12 @@ export function setupSignaling(wss) {
       });
     });
 
-    socket.on("close", () => {
+    socket.on("close", (code, reason) => {
+      console.log(
+        `[ws] close code=${code} reason=${reason} userId=${socket.userId} rooms=${JSON.stringify(
+          [...socket.rooms]
+        )}`
+      );
       handleClose(socket);
     });
 
