@@ -74,7 +74,10 @@ export default function ChatArea() {
     const area = messageAreaRef.current;
     if (area) {
       requestAnimationFrame(() => {
-        area.scrollTop = area.scrollHeight;
+        area.scrollTo({
+          top: area.scrollHeight,
+          behavior: 'smooth',
+        });
       });
     }
   }, []);
