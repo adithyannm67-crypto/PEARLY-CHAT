@@ -198,6 +198,14 @@ async function handleJoinRoom(socket, payload) {
 
   const alreadyJoined = socket.rooms.has(conversationId);
 
+  // One active room per socket: leave any previous room before joining a new one.
+  // This keeps getSignalingRoom() unambiguous.
+  for (const prevRoomId of [...socket.rooms]) {
+    if (prevRoomId !== conversationId) {
+      removeSocketFromRoom(socket, prevRoomId);
+    }
+  }
+
   room.sockets.add(socket);
   if (!room.participants.has(socket.userId)) {
     room.participants.set(socket.userId, new Set());
