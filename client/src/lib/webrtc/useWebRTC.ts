@@ -14,7 +14,7 @@ import { fetchIceServers } from './iceServers';
 import type { IceServer } from './iceServers';
 import { log } from './logger';
 
-type ConnectionStatus =
+    type ConnectionStatus =
   | 'disconnected'
   | 'connecting'
   | 'waiting-for-peer'

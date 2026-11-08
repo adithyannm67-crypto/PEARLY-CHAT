@@ -18,6 +18,10 @@ import { useConversations } from '@/hooks/useConversations';
 import { useConnectionRequests } from '@/hooks/useConnectionRequests';
 import { useSentConnectionRequests } from '@/hooks/useSentConnectionRequests';
 import getInitials from '@/lib/utils/getInitials';
+import { useWebRTC, type ConnectionStatus } from '@/lib/webrtc/useWebRTC';
+import { type DataChannelMessage } from '@/lib/webrtc/dataChannel';
+import { type PeerConnectionState } from '@/lib/webrtc/peerConnection';
+
 
 interface DashboardContextValue {
   session: { user: { id: string; email?: string; user_metadata?: Record<string, unknown> } | null } | null;
@@ -86,16 +90,37 @@ interface DashboardContextValue {
   displayError: string;
   selectedConversation: Conversation | null;
   sessionName: string;
+
+
+
+
+  webrtcConnectionState: ConnectionStatus;
+  isDataChannelOpen: boolean;
+  webrtcMessages: DataChannelMessage[];
+  connectWebRTC: () => Promise<void>;
+  disconnectWebRTC: () => void;
+  sendWebRTCMessage: (content: string) => Promise<boolean>;
+
+
 }
 
 const DashboardContext = createContext<DashboardContextValue | undefined>(undefined);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
+
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [showChat, setShowChat] = useState(false);
+  const [requestsOpen, setRequestsOpen] = useState(false);
+  const [requestTab, setRequestTab] = useState<'incoming' | 'sent' | 'history'>('incoming');
+  const [historyTab, setHistoryTab] = useState<'received' | 'sent'>('received');
+  const [activeModal, setActiveModal] = useState<'new-chat' | 'settings' | null>(null);
+
   const router = useRouter();
   const { session, loading: authLoading, signOut, supabase } = useSupabase();
   const userId = session?.user?.id ?? null;
 
   const { onlineUsers, setOwnStatus, isOwnOnline } = usePresence(userId);
+
 
   const {
     conversations,
@@ -125,6 +150,22 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     loadSentConnectionRequests,
     cancelRequest,
   } = useSentConnectionRequests(userId);
+
+
+
+
+
+  const {
+    connectionState: webrtcConnectionState,
+    isDataChannelOpen,
+    messages: webrtcMessages,
+    connect: connectWebRTC,
+    disconnect: disconnectWebRTC,
+    sendMessage: sendWebRTCMessage,
+  } = useWebRTC({
+    conversationId: selectedConversationId,
+    userId,
+  });
 
   const [requestHistory, setRequestHistory] = useState<ConnectionRequest[]>([]);
 
@@ -160,12 +201,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     void loadRequestHistory();
   }, [userId, loadRequestHistory]);
 
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [showChat, setShowChat] = useState(false);
-  const [requestsOpen, setRequestsOpen] = useState(false);
-  const [requestTab, setRequestTab] = useState<'incoming' | 'sent' | 'history'>('incoming');
-  const [historyTab, setHistoryTab] = useState<'received' | 'sent'>('received');
-  const [activeModal, setActiveModal] = useState<'new-chat' | 'settings' | null>(null);
+
 
   useEffect(() => {
     if (!authLoading && !userId) {
@@ -174,6 +210,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, [authLoading, router, userId]);
 
   const handleSelectConversation = (id: string) => {
+    if(id === selectedConversationId) return;
+
+    disconnectWebRTC();
+
     setSelectedConversationId(id);
     setShowChat(true);
   };
@@ -183,6 +223,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   };
 
   const handleLogout = async () => {
+    disconnectWebRTC();
+
+    setSelectedConversationId(null);
+    setShowChat(false);
+
+    await setOwnStatus(false);
+
+
+
     await signOut();
     router.push('/auth/login');
   };
@@ -227,14 +276,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const fallbackUser: ChatUser | null = userId
     ? {
-        id: userId,
-        name: sessionName,
-        username: (sessionUser?.user_metadata?.username as string | undefined) || '',
-        email: sessionUser?.email || '',
-        avatar: getInitials(sessionName),
-        status: isOwnOnline ? 'online' : 'offline',
-        lastSeen: '',
-      }
+      id: userId,
+      name: sessionName,
+      username: (sessionUser?.user_metadata?.username as string | undefined) || '',
+      email: sessionUser?.email || '',
+      avatar: getInitials(sessionName),
+      status: isOwnOnline ? 'online' : 'offline',
+      lastSeen: '',
+    }
     : null;
 
   const displayConversations = userId ? conversations : [];
@@ -310,6 +359,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       displayError,
       selectedConversation,
       sessionName,
+
+      webrtcConnectionState,
+      isDataChannelOpen,
+      webrtcMessages,
+      connectWebRTC,
+      disconnectWebRTC,
+      sendWebRTCMessage,
     }),
     [
       session,
@@ -369,6 +425,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       displayError,
       selectedConversation,
       sessionName,
+
+
+      webrtcConnectionState,
+      isDataChannelOpen,
+      webrtcMessages,
+      connectWebRTC,
+      disconnectWebRTC,
+      sendWebRTCMessage,
     ]
   );
 
