@@ -73,12 +73,12 @@ export default function ChatArea() {
   const scrollToBottom = useCallback(() => {
     const area = messageAreaRef.current;
     if (area) {
-      requestAnimationFrame(() => {
+      setTimeout(() => {
         area.scrollTo({
           top: area.scrollHeight,
           behavior: 'smooth',
         });
-      });
+      }, 0);
     }
   }, []);
 
@@ -177,7 +177,7 @@ export default function ChatArea() {
 
   // Scroll to bottom when new messages arrive (only if user is near bottom)
   useEffect(() => {
-    if (!selectedConversationId) return;
+    if (!selectedConversationId || loading) return;
 
     // On first load of a conversation, always scroll to bottom once messages exist
     if (pendingInitialScroll.current && localMessages.length > 0) {
@@ -196,7 +196,7 @@ export default function ChatArea() {
         setScrollToBottomVisible(true);
       }
     }
-  }, [localMessages, selectedConversationId, scrollToBottom]);
+  }, [localMessages, selectedConversationId, loading, scrollToBottom]);
 
   const handleScroll = useCallback(() => {
     const area = messageAreaRef.current;
