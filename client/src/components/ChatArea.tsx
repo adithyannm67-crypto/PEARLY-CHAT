@@ -70,8 +70,11 @@ export default function ChatArea() {
   const isSendingRef = useRef(false);
 
   const scrollToBottom = useCallback(() => {
-    if (messageAreaRef.current) {
-      messageAreaRef.current.scrollTop = messageAreaRef.current.scrollHeight;
+    const area = messageAreaRef.current;
+    if (area) {
+      requestAnimationFrame(() => {
+        area.scrollTop = area.scrollHeight;
+      });
     }
   }, []);
 
