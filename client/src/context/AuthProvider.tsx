@@ -3,6 +3,7 @@
 import { useEffect, useState, createContext, type ReactNode, useContext } from 'react';
 import { type SupabaseClient, type User } from '@supabase/supabase-js';
 import { supabase as browserSupabase } from '@/lib/supabase/client';
+import { requireSupabaseEnv } from '@/lib/supabase/client';
 import { authFetch } from '@/lib/authFetch';
 
 type Session = {
@@ -37,6 +38,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const supabase = browserSupabase;
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      requireSupabaseEnv();
+    } catch (err) {
+      setConfigError(
+        err instanceof Error
+          ? err.message
+          : 'Missing Supabase configuration. Please check environment variables.',
+      );
+    }
+  }, []);
 
   useEffect(() => {
     async function initSession() {
@@ -111,6 +125,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { error, data } = await supabase.auth.updateUser({ data: updates });
     return { error, data };
   };
+
+  if (configError) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center', color: '#ef4444' }}>
+        <h2>Configuration Error</h2>
+        <p>{configError}</p>
+        <p>Please set the required environment variables and restart the application.</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return <div>Loading authentication...</div>;
