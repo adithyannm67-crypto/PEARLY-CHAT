@@ -17,7 +17,8 @@ type SignalingEvent =
       sdpMid?: string;
       sdpMLineIndex?: number;
     }
-  | { type: 'ERROR'; code: string; message: string };
+  | { type: 'ERROR'; code: string; message: string }
+  | { type: 'PONG'; timestamp: number };
 
 type SignalingHandlers = {
   onAuthenticated?: (userId: string) => void;
@@ -50,6 +51,11 @@ class SignalingClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isConnecting = false;
   private shouldReconnect = true;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastPongReceived = 0;
+  private readonly HEARTBEAT_INTERVAL = 30000;
+  private readonly HEARTBEAT_TIMEOUT = 5000;
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
@@ -100,7 +106,9 @@ class SignalingClient {
           this.isConnecting = false;
           this.reconnectAttempts = 0;
           this.setState('connected');
+          this.lastPongReceived = Date.now();
           this.handlers.onConnect?.();
+          this.startHeartbeat();
           resolve();
         };
 
@@ -126,6 +134,7 @@ class SignalingClient {
         };
 
         ws.onclose = () => {
+          this.stopHeartbeat();
           this.ws = null;
           if (this.state !== 'disconnected') {
             this.setState('disconnected');
@@ -212,6 +221,9 @@ class SignalingClient {
       case 'ERROR':
         this.handlers.onError?.(message.code, message.message);
         break;
+      case 'PONG':
+        this.lastPongReceived = Date.now();
+        break;
     }
   }
 
@@ -261,8 +273,44 @@ class SignalingClient {
     this.handlers = { ...this.handlers, ...handlers };
   }
 
+  private startHeartbeat() {
+    this.stopHeartbeat();
+
+    this.heartbeatTimer = setInterval(() => {
+      const now = Date.now();
+
+      // If no pong received within the timeout window, the connection is stale.
+      if (now - this.lastPongReceived > this.HEARTBEAT_TIMEOUT) {
+        log('[heartbeat]', null, 'no pong received, closing stale WebSocket');
+        this.ws?.close(1006, 'heartbeat timeout');
+        return;
+      }
+
+      this.ws?.send(JSON.stringify({ type: 'PING', timestamp: now }));
+    }, this.HEARTBEAT_INTERVAL);
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    if (this.heartbeatTimeoutTimer) {
+      clearTimeout(this.heartbeatTimeoutTimer);
+      this.heartbeatTimeoutTimer = null;
+    }
+  }
+
+  isHealthy(): boolean {
+    return (
+      this.isConnected() &&
+      Date.now() - this.lastPongReceived <= this.HEARTBEAT_TIMEOUT
+    );
+  }
+
   disconnect() {
     this.shouldReconnect = false;
+    this.stopHeartbeat();
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;

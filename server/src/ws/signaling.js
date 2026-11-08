@@ -343,6 +343,9 @@ console.log("[signaling] message:", type);
     }
 
     switch (type) {
+      case "PING":
+        send(socket, { type: "PONG", timestamp: payload.timestamp });
+        return;
       case "JOIN_ROOM":
         await handleJoinRoom(socket, payload);
         break;
