@@ -116,14 +116,21 @@ export default function ChatArea() {
     });
   }, [webrtcMessages, selectedConversationId]);
 
-  // When selectedConversationId changes, fetch messages from the API
+  // When selectedConversationId changes, clear messages and fetch from the API
   useEffect(() => {
-    if (!selectedConversationId) return;
+    if (!selectedConversationId) {
+      setLocalMessages([]);
+      setLoading(false);
+      setError('');
+      return;
+    }
 
     let cancelled = false;
 
     async function loadMessages() {
+      setLocalMessages([]); // clear old conversation messages immediately
       setLoading(true);
+      setError('');
 
       try {
         const response = await authFetch(
