@@ -132,11 +132,6 @@ const ConversationItem = ({
           <p className="text-xs text-text-secondary truncate">
             {preview.slice(0, 45)}
           </p>
-          {conversation.unreadCount > 0 && (
-            <span className="min-w-[20px] h-5 rounded-full bg-primary text-white text-[10px] flex items-center justify-center font-medium px-1.5 shrink-0 ml-2">
-              {conversation.unreadCount}
-            </span>
-          )}
         </div>
       </div>
       {onDeleteConversation && (
