@@ -9,6 +9,7 @@ import {
 import {
   getDataChannelManager,
   type DataChannelMessage,
+  ACK_TIMEOUT_MS,
 } from './dataChannel';
 import { fetchIceServers } from './iceServers';
 import type { IceServer } from './iceServers';
@@ -67,6 +68,14 @@ export function useWebRTC({
   const peerJoinedRef = useRef(false);
   const iceServersRef = useRef<IceServer[]>([]);
 
+  // Track messages waiting for delivery acknowledgement
+  type PendingAck = {
+    resolve: (value: boolean) => void;
+    reject: (reason?: unknown) => void;
+    timeoutId: ReturnType<typeof setTimeout>;
+  };
+  const pendingAcksRef = useRef<Map<string, PendingAck>>(new Map());
+
   const addMessage = useCallback((message: DataChannelMessage) => {
     setMessages((prev) => {
       const exists = prev.some((m) => m.id === message.id);
@@ -74,6 +83,17 @@ export function useWebRTC({
       return [...prev, message];
     });
   }, []);
+
+  const clearPendingAck = useCallback(
+    (messageId: string) => {
+      const pending = pendingAcksRef.current.get(messageId);
+      if (pending) {
+        clearTimeout(pending.timeoutId);
+        pendingAcksRef.current.delete(messageId);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const client = getSignalingClient();
@@ -87,8 +107,6 @@ export function useWebRTC({
     client.setHandlers({
       onAuthenticated: (userId) => {
         log('[WS]', null, 'authenticated', { userId });
-        // Room joining is handled explicitly in connect(), not here.
-        // This prevents duplicate JOIN_ROOM messages.
       },
       onRoomJoined: (_conversationId, participantCount, participantIds) => {
         log(
@@ -103,7 +121,6 @@ export function useWebRTC({
           },
         );
 
-        // Determine the other participant (the peer we negotiate with)
         const otherUserId = participantIds.find(
           (id) => id !== localUserId.current,
         );
@@ -154,10 +171,6 @@ export function useWebRTC({
         }
 
         setConnectionState('negotiating');
-
-        // Do NOT create the offer manually here.
-        // Negotiation is driven by onnegotiationneeded in the peer connection manager.
-        // Both peers independently decide polite/impolite roles via manager.init().
       },
       onPeerLeft: () => {
         log('[WS]', null, 'peer left');
@@ -247,28 +260,27 @@ export function useWebRTC({
         if (message.senderId === localUserId.current) return;
         addMessage(message);
       },
+      onAck: (ackId) => {
+        const pending = pendingAcksRef.current.get(ackId);
+        if (pending) {
+          clearTimeout(pending.timeoutId);
+          pendingAcksRef.current.delete(ackId);
+          pending.resolve(true);
+        }
+      },
       onError: (error) => {
-        // Skip benign errors during intentional shutdown
         if (dataChannelRef.current?.getState() === 'closed') return;
-        // Log but don't tear down the connection — data channel errors
-        // can be transient or occur during intentional disconnect.
         log('[webrtc]', null, 'data channel error', error);
       },
     });
 
     return () => {
-      // The shared signaling WebSocket stays alive across unmounts (conversation
-      // switches, navigation, tab changes). Only WebRTC resources are cleaned up.
-      // Do NOT null the signaling client — it is a shared singleton used by all
-      // conversations and tabs. Nulling it here would break signaling for other
-      // active conversations.
       manager.close();
       channelMgr.close();
       peerManagerRef.current = null;
       dataChannelRef.current = null;
-      // Intentionally do NOT set signalingClientRef.current = null.
     };
-  }, [addMessage]);
+  }, [addMessage, clearPendingAck]);
 
   useEffect(() => {
     localUserId.current = userId;
@@ -278,7 +290,6 @@ export function useWebRTC({
     if (!conversationId || !userId) return;
     if (currentConversationId.current === conversationId) return;
 
-    // Reset for new conversation
     currentConversationId.current = conversationId;
     peerJoinedRef.current = false;
     peerUserIdRef.current = null;
@@ -300,11 +311,9 @@ export function useWebRTC({
 
       await client.connect(token);
 
-      // Fetch ICE server configuration from backend (includes temporary TURN credentials)
       const iceServers = await fetchIceServers();
       iceServersRef.current = iceServers;
 
-      // Join the room exactly once after authentication succeeds.
       client.joinRoom(conversationId);
 
       await peerManagerRef.current?.flushIceCandidates();
@@ -315,7 +324,6 @@ export function useWebRTC({
   }, [conversationId, userId]);
 
   const disconnect = useCallback(() => {
-    // FIX: Save conversation ID BEFORE nulling it, so leaveRoom uses the correct ID.
     const convId = currentConversationId.current;
 
     currentConversationId.current = null;
@@ -325,6 +333,13 @@ export function useWebRTC({
     setIsDataChannelOpen(false);
     setConnectionState('disconnected');
     setPeerConnectionState('new');
+
+    // Reject all pending ACKs on disconnect
+    pendingAcksRef.current.forEach((pending, messageId) => {
+      clearTimeout(pending.timeoutId);
+      pending.reject(new Error('Disconnected'));
+    });
+    pendingAcksRef.current.clear();
 
     if (convId) {
       signalingClientRef.current?.leaveRoom(convId);
@@ -336,10 +351,22 @@ export function useWebRTC({
   const sendMessage = useCallback(
     async (content: string): Promise<boolean> => {
       if (!userId || !currentConversationId.current) return false;
-      const sent = dataChannelRef.current?.send(content, userId);
+
+      const messageId = crypto.randomUUID();
+      const sent = dataChannelRef.current?.send(content, userId, messageId);
       if (!sent) {
         return false;
       }
+
+      // Wait for delivery acknowledgement with timeout
+      const ackReceived = await new Promise<boolean>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          pendingAcksRef.current.delete(messageId);
+          reject(new Error('ACK timeout'));
+        }, ACK_TIMEOUT_MS);
+
+        pendingAcksRef.current.set(messageId, { resolve, reject, timeoutId });
+      });
 
       // Persist to backend for history across refreshes
       try {
@@ -355,7 +382,7 @@ export function useWebRTC({
         // Persistence is best-effort; message still sent via data channel.
       }
 
-      return true;
+      return ackReceived;
     },
     [userId],
   );

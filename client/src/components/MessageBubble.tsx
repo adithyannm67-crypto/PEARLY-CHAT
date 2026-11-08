@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useMemo } from 'react';
-import { Check, CheckCheck, Clock, WifiOff } from 'lucide-react';
+import { Check, CheckCheck, Clock, RefreshCw, WifiOff } from 'lucide-react';
 import type { Message } from '@/types/chat';
 
 interface MessageBubbleProps {
@@ -11,6 +11,7 @@ interface MessageBubbleProps {
   showDateSeparator: boolean;
   dateLabel: string;
   prevMessage: Message | null;
+  onRetry?: (messageId: string) => void;
 }
 
 const STATUS_ICONS: Record<string, { icon: React.ElementType; color: string }> = {
@@ -28,6 +29,7 @@ export default function MessageBubble({
   showDateSeparator,
   dateLabel,
   prevMessage,
+  onRetry,
 }: MessageBubbleProps) {
   const isSent = message.senderId === userId;
   const statusConfig = STATUS_ICONS[message.status] ?? STATUS_ICONS.sent;
@@ -45,6 +47,12 @@ export default function MessageBubble({
 
   const alignClass = isSent ? 'flex-end' : 'flex-start';
   const bubbleMargin = isSent ? 'ml-auto' : 'mr-auto';
+
+  const handleRetry = useCallback(() => {
+    if (onRetry && message.status === 'failed') {
+      onRetry(message.id);
+    }
+  }, [onRetry, message.id, message.status]);
 
   return (
     <div key={message.id} className="flex w-full animate-slide-in-right">
@@ -92,7 +100,17 @@ export default function MessageBubble({
                 <>
                   <Icon size={11} className={statusColor} />
                   {message.status === 'failed' && (
-                    <span className="text-[10px] text-error ml-1">Failed</span>
+                    <>
+                      <span className="text-[10px] text-error ml-1">Failed</span>
+                      <button
+                        type="button"
+                        onClick={handleRetry}
+                        aria-label="Retry message"
+                        className="ml-1 p-1 text-[10px] text-error hover:text-error/80 hover:bg-error/10 rounded"
+                      >
+                        <RefreshCw size={10} />
+                      </button>
+                    </>
                   )}
                 </>
               )}

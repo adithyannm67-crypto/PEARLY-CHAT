@@ -8,14 +8,27 @@ type DataChannelMessage = {
   senderId: string;
 };
 
+type DataChannelAck = {
+  type: 'ack';
+  id: string;
+  ackId: string;
+  timestamp: string;
+  senderId: string;
+};
+
+type DataChannelPayload = DataChannelMessage | DataChannelAck;
+
 type DataChannelHandlers = {
   onOpen?: () => void;
   onClose?: () => void;
   onMessage?: (message: DataChannelMessage) => void;
+  onAck?: (ackId: string) => void;
   onError?: (error: string) => void;
 };
 
 type DataChannelState = 'connecting' | 'open' | 'closed' | 'failed';
+
+const ACK_TIMEOUT_MS = 10_000;
 
 class DataChannelManager {
   private channel: RTCDataChannel | null = null;
@@ -58,11 +71,20 @@ class DataChannelManager {
 
     channel.onmessage = (event) => {
       try {
-        const parsed = JSON.parse(event.data) as DataChannelMessage;
+        const parsed = JSON.parse(event.data) as DataChannelPayload;
         if (!this.isValidMessage(parsed)) {
           throw new Error('Invalid message payload');
         }
+
+        if (parsed.type === 'ack') {
+          this.handlers.onAck?.(parsed.ackId);
+          return;
+        }
+
         this.handlers.onMessage?.(parsed);
+
+        // Auto-acknowledge received text messages
+        this.sendAck(parsed.id, parsed.senderId);
       } catch (err) {
         console.error('[dataChannel] invalid message:', err);
         this.handlers.onError?.('INVALID_MESSAGE');
@@ -70,28 +92,39 @@ class DataChannelManager {
     };
   }
 
-  private isValidMessage(message: unknown): message is DataChannelMessage {
+  private isValidMessage(message: unknown): message is DataChannelPayload {
     if (!message || typeof message !== 'object' || Array.isArray(message)) {
       return false;
     }
     const m = message as Record<string, unknown>;
-    return (
-      m.type === 'text' &&
-      typeof m.id === 'string' &&
-      typeof m.content === 'string' &&
-      typeof m.timestamp === 'string' &&
-      typeof m.senderId === 'string'
-    );
+    if (m.type === 'text') {
+      return (
+        typeof m.id === 'string' &&
+        typeof m.content === 'string' &&
+        typeof m.timestamp === 'string' &&
+        typeof m.senderId === 'string'
+      );
+    }
+    if (m.type === 'ack') {
+      return (
+        typeof m.id === 'string' &&
+        typeof m.ackId === 'string' &&
+        typeof m.timestamp === 'string' &&
+        typeof m.senderId === 'string'
+      );
+    }
+    return false;
   }
 
-  send(content: string, senderId: string): boolean {
+  send(content: string, senderId: string, messageId?: string): boolean {
     if (!this.isOpen() || !this.channel) {
       return false;
     }
 
+    const id = messageId ?? crypto.randomUUID();
     const message: DataChannelMessage = {
       type: 'text',
-      id: crypto.randomUUID(),
+      id,
       content,
       timestamp: new Date().toISOString(),
       senderId,
@@ -102,6 +135,28 @@ class DataChannelManager {
       return true;
     } catch (err) {
       console.error('[dataChannel] send error:', err);
+      return false;
+    }
+  }
+
+  sendAck(ackId: string, senderId: string): boolean {
+    if (!this.isOpen() || !this.channel) {
+      return false;
+    }
+
+    const message: DataChannelAck = {
+      type: 'ack',
+      id: crypto.randomUUID(),
+      ackId,
+      timestamp: new Date().toISOString(),
+      senderId,
+    };
+
+    try {
+      this.channel.send(JSON.stringify(message));
+      return true;
+    } catch (err) {
+      console.error('[dataChannel] send ack error:', err);
       return false;
     }
   }
@@ -138,4 +193,6 @@ export type {
   DataChannelMessage,
   DataChannelHandlers,
   DataChannelState,
+  DataChannelAck,
 };
+export { ACK_TIMEOUT_MS };
