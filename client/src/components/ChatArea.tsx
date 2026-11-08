@@ -69,6 +69,12 @@ export default function ChatArea() {
   const isUserScrollingRef = useRef(false);
   const isSendingRef = useRef(false);
 
+  const scrollToBottom = useCallback(() => {
+    if (messageAreaRef.current) {
+      messageAreaRef.current.scrollTop = messageAreaRef.current.scrollHeight;
+    }
+  }, []);
+
   const selectedConversationId = selectedConversation?.id ?? null;
 
   // Connect/disconnect WebRTC when conversation changes
@@ -152,12 +158,12 @@ export default function ChatArea() {
       const isNearBottom =
         area.scrollHeight - area.scrollTop - area.clientHeight < 100;
       if (isNearBottom) {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        scrollToBottom();
       } else {
         setScrollToBottomVisible(true);
       }
     }
-  }, [localMessages]);
+  }, [localMessages, scrollToBottom]);
 
   const handleScroll = useCallback(() => {
     const area = messageAreaRef.current;
@@ -197,6 +203,7 @@ export default function ChatArea() {
       };
 
       setLocalMessages((prev) => [...prev, optimistic]);
+      scrollToBottom();
 
       void (async () => {
         const sent = await sendWebRTCMessage(content);
@@ -231,7 +238,7 @@ export default function ChatArea() {
         isSendingRef.current = false;
       })();
     },
-    [userId, isDataChannelOpen, selectedConversationId, sendWebRTCMessage],
+    [userId, isDataChannelOpen, selectedConversationId, sendWebRTCMessage, scrollToBottom],
   );
 
   // Empty State
@@ -377,7 +384,7 @@ export default function ChatArea() {
           <button
             type="button"
             onClick={() => {
-              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              scrollToBottom();
               setScrollToBottomVisible(false);
             }}
             className="scroll-to-bottom-btn"
