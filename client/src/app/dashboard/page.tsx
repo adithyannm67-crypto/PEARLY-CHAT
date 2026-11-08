@@ -39,11 +39,16 @@ function DashboardInner() {
 
   return (
     <div className="h-full flex overflow-hidden dvh no-pull-to-refresh">
+      {/* Mobile: conversation list full-width when not in chat view */}
       {!showChat && (
-        <aside className="relative flex flex-col h-full bg-bg-secondary select-none md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom hidden md:block">
+        <aside className="relative flex flex-col h-full bg-bg-secondary select-none w-full border-r border-border-custom md:hidden">
           <Sidebar />
         </aside>
       )}
+      {/* Desktop: always show sidebar alongside chat */}
+      <aside className="hidden md:flex flex-col h-full bg-bg-secondary select-none md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom">
+        <Sidebar />
+      </aside>
       <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         <ChatArea />
         {showChat && (
