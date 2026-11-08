@@ -19,6 +19,7 @@ import { useConnectionRequests } from '@/hooks/useConnectionRequests';
 import { useSentConnectionRequests } from '@/hooks/useSentConnectionRequests';
 import getInitials from '@/lib/utils/getInitials';
 import { useWebRTC, type ConnectionStatus } from '@/lib/webrtc/useWebRTC';
+import { getSignalingClient } from '@/lib/webrtc/signalingClient';
 import { type DataChannelMessage } from '@/lib/webrtc/dataChannel';
 import { type PeerConnectionState } from '@/lib/webrtc/peerConnection';
 
@@ -224,6 +225,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const handleLogout = async () => {
     disconnectWebRTC();
+
+    // Close the shared signaling WebSocket on logout.
+    getSignalingClient().disconnect();
 
     setSelectedConversationId(null);
     setShowChat(false);
