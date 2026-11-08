@@ -165,10 +165,13 @@ export default function ChatArea() {
     };
   }, [selectedConversationId]);
 
-  // When conversation changes, flag that we need an initial scroll-to-bottom
+  // When conversation changes, reset scroll state and flag initial scroll
   useEffect(() => {
     if (selectedConversationId) {
+      isUserScrollingRef.current = false;
       pendingInitialScroll.current = true;
+    } else {
+      pendingInitialScroll.current = false;
     }
   }, [selectedConversationId]);
 
