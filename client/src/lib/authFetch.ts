@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
-import { SERVER_URL } from './serverProxy';
+import { SERVER_URL, requireServerUrl } from './serverProxy';
 
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_RETRIES = 2;
@@ -46,7 +46,7 @@ export async function authFetch(
 
   let resolvedInput = input;
   if (typeof input === 'string' && input.startsWith('/')) {
-    resolvedInput = `${SERVER_URL}${input}`;
+    resolvedInput = `${requireServerUrl()}${input}`;
   }
 
   const fetchInit: RequestInit = {
