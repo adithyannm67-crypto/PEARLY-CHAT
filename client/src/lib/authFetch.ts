@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase/client';
+import { SERVER_URL } from './serverProxy';
 
 export async function authFetch(
   input: RequestInfo | URL,
@@ -18,5 +19,17 @@ export async function authFetch(
     headers.set('Accept', 'application/json');
   }
 
-  return fetch(input, { ...init, headers });
+  // Resolve relative API paths directly against the backend server so the
+  // browser contacts http://localhost:5000 exactly, with no Next.js proxy
+  // layer in between.
+  let resolvedInput = input;
+  if (typeof input === 'string' && input.startsWith('/')) {
+    resolvedInput = `${SERVER_URL}${input}`;
+  }
+
+  return fetch(resolvedInput, {
+    ...init,
+    credentials: 'include',
+    headers,
+  });
 }
