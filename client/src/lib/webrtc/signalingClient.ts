@@ -312,7 +312,7 @@ class SignalingClient {
           now,
           timeoutMs: this.HEARTBEAT_TIMEOUT,
         });
-        this.ws?.close(1006, 'heartbeat timeout');
+        this.ws?.close(1011, 'heartbeat timeout');
         return;
       }
 
