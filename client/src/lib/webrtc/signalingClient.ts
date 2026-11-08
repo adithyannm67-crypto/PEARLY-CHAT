@@ -51,6 +51,7 @@ class SignalingClient {
   private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   private isConnecting = false;
   private shouldReconnect = true;
+  private readonly instanceId: string;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private lastPongReceived = 0;
@@ -59,6 +60,7 @@ class SignalingClient {
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
+    this.instanceId = crypto.randomUUID();
     const wsUrl = SERVER_URL!.replace(/^http(?=s?)/, 'ws');
     this.url = `${wsUrl}`;
   }
@@ -108,6 +110,11 @@ class SignalingClient {
           this.setState('connected');
           this.lastPongReceived = Date.now();
           this.handlers.onConnect?.();
+          log('[WS]', null, 'WebSocket opened', {
+            instanceId: this.instanceId,
+            readyState: ws.readyState,
+            url: this.url,
+          });
           this.startHeartbeat();
           resolve();
         };
@@ -133,11 +140,19 @@ class SignalingClient {
           }
         };
 
-        ws.onclose = () => {
+        ws.onclose = (event) => {
           this.stopHeartbeat();
           this.ws = null;
           if (this.state !== 'disconnected') {
             this.setState('disconnected');
+            log('[WS]', null, 'WebSocket closed', {
+              instanceId: this.instanceId,
+              code: event.code,
+              reason: event.reason,
+              wasClean: event.wasClean,
+              reconnectAttempts: this.reconnectAttempts,
+              shouldReconnect: this.shouldReconnect,
+            });
             this.handlers.onDisconnect?.();
             if (this.shouldReconnect) {
               this.scheduleReconnect();
@@ -146,6 +161,10 @@ class SignalingClient {
         };
 
         ws.onerror = (err) => {
+          log('[WS]', null, 'WebSocket error', {
+            instanceId: this.instanceId,
+            readyState: this.ws?.readyState,
+          });
           console.error('[signaling] WebSocket error:', err);
           this.setState('failed');
           this.handlers.onError?.('CONNECTION_ERROR', 'WebSocket connection failed');
@@ -172,6 +191,12 @@ class SignalingClient {
     this.setState('reconnecting');
 
     const delay = Math.min(1000 * this.reconnectAttempts, 30000);
+    log('[WS]', null, 'scheduling reconnect', {
+      instanceId: this.instanceId,
+      attempt: this.reconnectAttempts,
+      delayMs: delay,
+      maxAttempts: this.maxReconnectAttempts,
+    });
     this.reconnectTimeout = setTimeout(() => {
       this.reconnectTimeout = null;
       void this.connect();
@@ -281,7 +306,12 @@ class SignalingClient {
 
       // If no pong received within the timeout window, the connection is stale.
       if (now - this.lastPongReceived > this.HEARTBEAT_TIMEOUT) {
-        log('[heartbeat]', null, 'no pong received, closing stale WebSocket');
+        log('[heartbeat]', null, 'no pong received, closing stale WebSocket', {
+          instanceId: this.instanceId,
+          lastPongReceived: this.lastPongReceived,
+          now,
+          timeoutMs: this.HEARTBEAT_TIMEOUT,
+        });
         this.ws?.close(1006, 'heartbeat timeout');
         return;
       }
@@ -323,6 +353,10 @@ class SignalingClient {
   }
 
   async reconnect(token?: string): Promise<void> {
+    log('[WS]', null, 'reconnecting WebSocket', {
+      instanceId: this.instanceId,
+      attempt: this.reconnectAttempts + 1,
+    });
     this.shouldReconnect = true;
     this.stopHeartbeat();
     if (this.ws) {

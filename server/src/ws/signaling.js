@@ -374,6 +374,9 @@ export function setupSignaling(wss) {
   const heartbeatInterval = setInterval(() => {
     wss.clients.forEach((socket) => {
       if (socket.isAlive === false) {
+        console.log(
+          `[ws] heartbeat terminate instanceId=${socket.instanceId} userId=${socket.userId} readyState=${socket.readyState}`
+        );
         socket.terminate();
         return;
       }
@@ -392,10 +395,15 @@ export function setupSignaling(wss) {
     socket.authenticated = false;
     socket.rooms = new Set();
     socket.isAlive = true;
+    socket.instanceId = crypto.randomUUID();
 
     socket.on("pong", () => {
       socket.isAlive = true;
     });
+
+    console.log(
+      `[ws] connection instanceId=${socket.instanceId} readyState=${socket.readyState} url=${request.url}`
+    );
 
     (async () => {
       try {
@@ -427,7 +435,7 @@ export function setupSignaling(wss) {
 
     socket.on("close", (code, reason) => {
       console.log(
-        `[ws] close code=${code} reason=${reason} userId=${socket.userId} rooms=${JSON.stringify(
+        `[ws] close instanceId=${socket.instanceId} code=${code} reason=${reason} userId=${socket.userId} readyState=${socket.readyState} rooms=${JSON.stringify(
           [...socket.rooms]
         )}`
       );
