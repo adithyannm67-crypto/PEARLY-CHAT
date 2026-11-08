@@ -26,9 +26,18 @@ function fetchWithTimeout(
   });
 }
 
+export type AuthFetchOptions = {
+  /** When true, the request will be retried on transient network failures.
+   * Defaults to true only for idempotent methods (GET, HEAD, OPTIONS).
+   * Non-idempotent methods (POST, PUT, PATCH, DELETE) are NOT retried by default
+   * to avoid duplicate operations. */
+  retryable?: boolean;
+};
+
 export async function authFetch(
   input: RequestInfo | URL,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  options: AuthFetchOptions = {}
 ): Promise<Response> {
   const {
     data: { session },
@@ -48,6 +57,10 @@ export async function authFetch(
   if (typeof input === 'string' && input.startsWith('/')) {
     resolvedInput = `${requireServerUrl()}${input}`;
   }
+
+  const method = (init.method ?? 'GET').toUpperCase();
+  const isIdempotent = method === 'GET' || method === 'HEAD' || method === 'OPTIONS';
+  const retryable = options.retryable ?? isIdempotent;
 
   const fetchInit: RequestInit = {
     ...init,
@@ -69,16 +82,17 @@ export async function authFetch(
 
       // If it's an abort (timeout), treat as retryable network error.
       if (err instanceof DOMException && err.name === 'AbortError') {
-        if (attempt < MAX_RETRIES) {
+        if (retryable && attempt < MAX_RETRIES) {
           await sleep(RETRY_BASE_DELAY_MS * (attempt + 1));
           continue;
         }
         throw new Error('Request timed out. Please try again.');
       }
 
-      // Network errors (e.g. ERR_INTERNET_DISCONNECTED, DNS failure) are retryable.
+      // Network errors (e.g. ERR_INTERNET_DISCONNECTED, DNS failure) are retryable
+      // only for idempotent methods or when explicitly opted in.
       if (err instanceof TypeError) {
-        if (attempt < MAX_RETRIES) {
+        if (retryable && attempt < MAX_RETRIES) {
           await sleep(RETRY_BASE_DELAY_MS * (attempt + 1));
           continue;
         }

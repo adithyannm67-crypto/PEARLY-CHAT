@@ -28,6 +28,7 @@ export const viewport = {
 };
 
 import { AuthProvider } from '@/context/AuthProvider';
+import OfflineBanner from '@/components/OfflineBanner';
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="h-full bg-bg-main text-text-primary font-sans no-pull-to-refresh">
         <AuthProvider>{children}</AuthProvider>
+        <OfflineBanner />
       </body>
     </html>
   );
