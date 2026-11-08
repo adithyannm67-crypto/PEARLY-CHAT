@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MessageCircle,
-  Phone,
-  Video,
   MoreVertical,
   ArrowLeft,
 } from 'lucide-react';
@@ -79,12 +77,6 @@ export default function ChatArea() {
           behavior: 'smooth',
         });
       }, 0);
-    }
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    if (messageAreaRef.current) {
-      messageAreaRef.current.scrollTop = messageAreaRef.current.scrollHeight;
     }
   }, []);
 
@@ -378,20 +370,6 @@ export default function ChatArea() {
             status={webrtcConnectionState}
             isDataChannelOpen={isDataChannelOpen}
           />
-          <button
-            type="button"
-            aria-label="Voice call"
-            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer touch-target"
-          >
-            <Phone size={18} />
-          </button>
-          <button
-            type="button"
-            aria-label="Video call"
-            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer touch-target"
-          >
-            <Video size={18} />
-          </button>
           <button
             type="button"
             aria-label="More options"
