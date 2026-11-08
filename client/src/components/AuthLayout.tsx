@@ -17,35 +17,35 @@ export default function AuthLayout({
 }: AuthLayoutProps) {
   return (
     <div className="relative flex min-h-screen bg-bg-main">
-      {/* Left branding section */}
-      <div className="hidden lg:flex lg:w-1/2 bg-bg-secondary flex-col items-center justify-center p-12 border-r border-border-custom/40">
-        <MessageCircle size={80} className="text-primary opacity-80" />
+      {/* Left branding section (desktop only) */}
+      <div className="hidden lg:flex lg:w-1/2 bg-bg-secondary flex-col items-center justify-center p-6 border-r border-border-custom/40 safe-area-inset-top">
+        <MessageCircle size={64} className="text-primary opacity-80" />
 
-        <h1 className="text-4xl font-bold text-text-primary mt-6 tracking-tight">
+        <h1 className="text-3xl font-bold text-text-primary mt-4 tracking-tight">
           Peerly
         </h1>
 
-        <p className="text-lg text-text-secondary mt-2 text-center">
+        <p className="text-base text-text-secondary mt-2 text-center">
           Conversations Without Boundaries.
         </p>
 
-        <div className="mt-12 space-y-4">
+        <div className="mt-8 space-y-4">
           <div className="flex items-center gap-3">
-            <Shield size={20} className="text-primary shrink-0" />
+            <Shield size={18} className="text-primary shrink-0" />
             <span className="text-sm text-text-secondary">
               End-to-end encrypted messaging
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <Lock size={20} className="text-primary shrink-0" />
+            <Lock size={18} className="text-primary shrink-0" />
             <span className="text-sm text-text-secondary">
               Peer-to-peer architecture
             </span>
           </div>
 
           <div className="flex items-center gap-3">
-            <Shield size={20} className="text-primary shrink-0" />
+            <Shield size={18} className="text-primary shrink-0" />
             <span className="text-sm text-text-secondary">
               No data collection
             </span>
@@ -54,16 +54,16 @@ export default function AuthLayout({
       </div>
 
       {/* Right form section */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 pb-20">
+      <div className="w-full flex items-center justify-center p-4 lg:p-12 pb-6 safe-area-inset-bottom safe-area-inset-top">
         <div className="w-full max-w-md opacity-100 animate-fade-in">
-          <div className="flex items-center gap-2 mb-8">
-            <MessageCircle size={28} className="text-primary" />
-            <span className="text-2xl font-bold text-text-primary tracking-tight">
+          <div className="flex items-center gap-2 mb-6">
+            <MessageCircle size={24} className="text-primary" />
+            <span className="text-xl font-bold text-text-primary tracking-tight">
               Peerly
             </span>
           </div>
 
-          <h2 className="text-xl font-semibold text-text-primary">
+          <h2 className="text-lg font-semibold text-text-primary">
             {title}
           </h2>
 
@@ -76,7 +76,7 @@ export default function AuthLayout({
       </div>
 
       {/* Footer */}
-      <footer className="absolute bottom-0 left-0 w-full text-center py-4 pointer-events-none">
+      <footer className="absolute bottom-0 left-0 w-full text-center py-4 pointer-events-none safe-area-inset-bottom">
         <p className="text-text-secondary/40 text-xs">
           © 2026 Peerly. Conversations Without Boundaries.
         </p>

@@ -9,7 +9,7 @@ const SearchBar = ({
   setSearchQuery: (query: string) => void;
 }) => {
   return (
-    <div className="px-3 py-3 shrink-0">
+    <div className="px-3 py-2 sm:px-4 sm:py-3 shrink-0">
       <div className="relative">
         <Search
           size={16}
@@ -20,7 +20,7 @@ const SearchBar = ({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search conversations..."
-          className="w-full bg-surface border-none rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="w-full bg-surface border-none rounded-lg pl-9 pr-4 py-2 sm:py-2.5 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
     </div>

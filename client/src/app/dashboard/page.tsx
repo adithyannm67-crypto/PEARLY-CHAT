@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import { DashboardProvider, useDashboard } from '@/context/DashboardContext';
 import { useDashboardRealtime } from '@/hooks/useDashboardRealtime';
+import { ArrowLeft } from 'lucide-react';
 
 export default function DashboardPage() {
   return (
@@ -22,6 +23,8 @@ function DashboardInner() {
     loadConnectionRequests,
     loadSentConnectionRequests,
     loadRequestHistory,
+    showChat,
+    handleBack,
   } = useDashboard();
 
   useDashboardRealtime({
@@ -35,9 +38,25 @@ function DashboardInner() {
   });
 
   return (
-    <div className="h-full flex overflow-hidden">
-      <Sidebar />
-      <ChatArea />
+    <div className="h-full flex overflow-hidden dvh no-pull-to-refresh">
+      {!showChat && (
+        <aside className="relative flex flex-col h-full bg-bg-secondary select-none md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom hidden md:block">
+          <Sidebar />
+        </aside>
+      )}
+      <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
+        <ChatArea />
+        {showChat && (
+          <button
+            type="button"
+            onClick={handleBack}
+            aria-label="Back to conversations"
+            className="absolute left-3 top-3 z-20 p-2 rounded-lg bg-black/60 text-white hover:bg-black/70 transition-colors cursor-pointer md:hidden touch-target"
+          >
+            <ArrowLeft size={20} />
+          </button>
+        )}
+      </main>
     </div>
   );
 }

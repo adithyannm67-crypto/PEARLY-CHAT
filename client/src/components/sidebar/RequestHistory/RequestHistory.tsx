@@ -65,7 +65,7 @@ export default function RequestHistory({
   };
 
   return (
-    <div className="border border-border-custom rounded-lg">
+    <div className="border border-border-custom rounded-lg sm:rounded-xl">
       <RequestHistoryTabs activeTab={historyTab} onChange={setHistoryTab} />
       {loading && <p className="p-4 text-sm text-text-secondary">Loading...</p>}
       {error && (

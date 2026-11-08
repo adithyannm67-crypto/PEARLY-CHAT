@@ -56,7 +56,7 @@ export default function Sidebar() {
     : [...connectionRequests, ...sentConnectionRequests];
 
   return (
-    <aside className="relative flex flex-col h-full bg-bg-secondary select-none md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom">
+    <aside className="relative flex flex-col h-full bg-bg-secondary select-none w-full md:w-[420px] lg:w-[480px] flex-shrink-0 border-r border-border-custom">
           <SidebarHeader
             currentUser={currentUser}
             setRequestsOpen={setRequestsOpen}
@@ -69,7 +69,7 @@ export default function Sidebar() {
       <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
       {requestsOpen && (
-        <div className="absolute top-16 left-0 right-0 z-20 mx-3 rounded-lg border border-border-custom bg-bg-secondary shadow-lg max-h-96 overflow-y-auto">
+        <div className="absolute top-16 left-0 right-0 z-20 mx-3 md:mx-0 rounded-lg border border-border-custom bg-bg-secondary shadow-lg max-h-96 overflow-y-auto md:top-16 md:left-0 md:right-auto md:mx-3 md:max-h-96">
           <RequestHistory userId={userId} />
         </div>
       )}

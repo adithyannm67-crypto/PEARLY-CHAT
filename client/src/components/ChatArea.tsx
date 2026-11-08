@@ -191,7 +191,7 @@ export default function ChatArea() {
   // Empty State (when no selectedConversation is selected)
   if (!selectedConversationId || !selectedConversation || !otherUser) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-bg-main h-full">
+      <div className="flex-1 flex items-center justify-center bg-bg-main h-full safe-area-inset-top">
         <div className="flex flex-col items-center text-center p-6 select-none">
           {/* Decorative circle */}
           <div className="w-24 h-24 rounded-full bg-surface/50 flex items-center justify-center mb-6">
@@ -201,7 +201,7 @@ export default function ChatArea() {
             Welcome to Peerly
           </h2>
           <p className="text-sm text-text-secondary mt-1">
-            Select a selectedConversation to start chatting
+            Select a conversation to start chatting
           </p>
         </div>
       </div>
@@ -212,13 +212,13 @@ export default function ChatArea() {
   return (
     <div className="flex flex-col h-full bg-bg-main">
       {/* 1. Chat Header */}
-      <header className="h-16 bg-bg-secondary border-b border-border-custom px-4 flex items-center gap-3 shrink-0">
+      <header className="h-16 bg-bg-secondary border-b border-border-custom px-4 flex items-center gap-3 shrink-0 safe-area-inset-top">
         {/* Back button (mobile) */}
         <button
           type="button"
           onClick={handleBack}
-          aria-label="Back to selectedConversations"
-          className="md:hidden p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+          aria-label="Back to conversations"
+          className="md:hidden p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer touch-target"
         >
           <ArrowLeft size={20} />
         </button>
@@ -253,21 +253,21 @@ export default function ChatArea() {
           <button
             type="button"
             aria-label="Voice call"
-            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer touch-target"
           >
             <Phone size={18} />
           </button>
           <button
             type="button"
             aria-label="Video call"
-            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer touch-target"
           >
             <Video size={18} />
           </button>
           <button
             type="button"
             aria-label="More options"
-            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer touch-target"
           >
             <MoreVertical size={18} />
           </button>
@@ -275,7 +275,7 @@ export default function ChatArea() {
       </header>
 
       {/* 2. Message area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-1">
+      <div className="flex-1 overflow-y-auto p-4 space-y-1 pb-10 safe-area-inset-bottom no-pull-to-refresh">
         {loading && (
           <div className="text-center text-sm text-text-secondary py-4">
             Loading messages...
@@ -319,10 +319,10 @@ export default function ChatArea() {
                 className={`flex w-full ${isSent ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-3' : 'mt-1'
                   }`}
               >
-                <div
-                  className={`flex flex-col ${isSent ? 'items-end' : 'items-start'
-                    } max-w-[70%]`}
-                >
+                  <div
+                    className={`flex flex-col ${isSent ? 'items-end' : 'items-start'
+                      } max-w-[85%]`}
+                  >
                   {/* Bubble */}
                   <div
                     className={`px-4 py-2 w-fit break-words text-sm leading-relaxed ${isSent
@@ -358,7 +358,7 @@ export default function ChatArea() {
       </div>
 
       {/* 3. Message input bar */}
-      <div className="bg-bg-secondary border-t border-border-custom p-3 shrink-0">
+      <div className="bg-bg-secondary border-t border-border-custom p-3 shrink-0 safe-area-inset-bottom">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -370,7 +370,7 @@ export default function ChatArea() {
           <button
             type="button"
             aria-label="Attach file"
-            className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer"
+            className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer touch-target"
           >
             <Paperclip size={18} />
           </button>
@@ -394,7 +394,7 @@ export default function ChatArea() {
           <button
             type="button"
             aria-label="Insert emoji"
-            className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer"
+            className="p-2 rounded-full text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer touch-target"
           >
             <Smile size={18} />
           </button>
@@ -407,8 +407,8 @@ export default function ChatArea() {
             }
             aria-label="Send message"
             className={`p-2.5 rounded-full transition-all ${messageInput.trim() && isDataChannelOpen && userId
-              ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm'
-              : 'bg-surface text-text-secondary cursor-not-allowed'
+              ? 'bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-sm touch-target'
+              : 'bg-surface text-text-secondary cursor-not-allowed touch-target'
               }`}
           >
             <SendHorizontal size={18} />

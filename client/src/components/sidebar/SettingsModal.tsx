@@ -56,7 +56,7 @@ export default function SettingsModal({
 
   return (
     <ChatModal title="Settings" onClose={onClose}>
-      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+      <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4">
         <div className="flex items-center gap-3">
           <Avatar initials={currentUser.avatar} size="lg" />
           <div className="min-w-0">
@@ -108,14 +108,14 @@ export default function SettingsModal({
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-lg text-sm text-text-secondary hover:text-text-primary hover:bg-surface transition-colors cursor-pointer touch-target"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving || !name.trim() || !username.trim()}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-lg text-sm font-medium bg-primary text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer touch-target"
           >
             {saving ? 'Saving...' : 'Save changes'}
           </button>

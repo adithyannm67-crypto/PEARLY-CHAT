@@ -109,10 +109,10 @@ const ConversationItem = ({
           onSelectConversation(conversation.id);
         }
       }}
-      className={`w-full text-left px-3 py-3 flex items-center gap-3 transition-colors cursor-pointer ${isSelected
+      className={`w-full text-left px-3 sm:px-4 py-3 sm:py-3.5 flex items-center gap-3 sm:gap-3 transition-colors cursor-pointer ${isSelected
         ? 'bg-primary/10 border-l-2 border-l-primary'
         : 'border-l-2 border-l-transparent hover:bg-surface/50'
-        }`}
+        } touch-target`}
     >
       <Avatar
         initials={otherUser.avatar}

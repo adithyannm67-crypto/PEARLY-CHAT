@@ -118,7 +118,7 @@ export default function NewChatModal({
 
   return (
     <ChatModal title="New chat" onClose={onClose}>
-      <div className="p-4">
+      <div className="p-4 sm:p-5">
         <div className="relative">
           <Search
             size={16}
@@ -129,7 +129,7 @@ export default function NewChatModal({
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search people..."
-            className="w-full bg-surface border-none rounded-lg pl-9 pr-4 py-2 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full bg-surface border-none rounded-lg pl-9 pr-4 py-2 sm:py-2.5 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
 
@@ -141,7 +141,7 @@ export default function NewChatModal({
           </p>
         )}
 
-        <div className="mt-3 max-h-80 overflow-y-auto -mx-2">
+        <div className="mt-3 max-h-80 overflow-y-auto -mx-2 sm:-mx-0">
           {loading && (
             <p className="p-4 text-center text-sm text-text-secondary">
               Loading people...
@@ -155,7 +155,7 @@ export default function NewChatModal({
                 type="button"
                 disabled={creatingId !== null || sentTo === user.id}
                 onClick={() => handleSendRequest(user)}
-                className="w-full text-left px-2 py-2.5 flex items-center gap-3 rounded-lg hover:bg-surface/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full text-left px-3 py-3 sm:px-2 sm:py-2.5 flex items-center gap-3 rounded-lg hover:bg-surface/60 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed touch-target"
               >
                 <Avatar initials={user.avatar} size="md" />
                 <div className="flex-1 min-w-0">

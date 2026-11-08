@@ -89,3 +89,102 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out forwards;
 }
+
+/* Slide-up animation for modals/bottom sheets */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s ease-out forwards;
+}
+
+/* Slide-right animation for mobile drawer */
+@keyframes slideRight {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-right {
+  animation: slideRight 0.25s ease-out forwards;
+}
+
+/* Mobile-safe area and dynamic viewport utilities */
+.dvh {
+  height: 100dvh;
+}
+
+.safe-area-inset-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-area-inset-top {
+  padding-top: env(safe-area-inset-top);
+}
+
+.safe-area-inset-left {
+  padding-left: env(safe-area-inset-left);
+}
+
+.safe-area-inset-right {
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Touch target minimum size */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Prevent pull-to-refresh on mobile web */
+.no-pull-to-refresh {
+  overscroll-behavior-y: contain;
+}
+
+/* Reduce motion support */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-slide-right {
+    animation: none;
+  }
+}
+
+/* Mobile bottom sheet for modals */
+.mobile-bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-top-left-radius: 1rem;
+  border-top-right-radius: 1rem;
+  animation: slideUp 0.3s ease-out forwards;
+}
+
+@media (min-width: 640px) {
+  .mobile-bottom-sheet {
+    position: relative;
+    bottom: auto;
+    max-height: none;
+    width: auto;
+    max-width: 100%;
+    overflow-y: visible;
+    border-radius: 0.75rem;
+    margin: 0 auto;
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+}
