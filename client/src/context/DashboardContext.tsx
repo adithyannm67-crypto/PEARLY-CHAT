@@ -220,6 +220,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   };
 
   const handleBack = () => {
+    
+
+    disconnectWebRTC();
+
+    setSelectedConversationId(null);
+
     setShowChat(false);
   };
 
