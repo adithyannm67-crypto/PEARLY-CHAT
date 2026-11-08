@@ -177,12 +177,11 @@ export default function ChatArea() {
   const otherUser = selectedConversation?.otherUser ?? null;
 
   const handleSendMessage = useCallback(
-    (content: string) => {
+    async (content: string) => {
       if (!userId) return;
       setError('');
 
-      // Prevent double submission (e.g. mobile keyboard firing both
-      // keyDown and form submit for the same message).
+      // Prevent double submission
       if (isSendingRef.current) return;
       isSendingRef.current = true;
 
@@ -192,9 +191,9 @@ export default function ChatArea() {
         return;
       }
 
-      const optimisticId = crypto.randomUUID();
+      const messageId = crypto.randomUUID();
       const optimistic: Message = {
-        id: optimisticId,
+        id: messageId,
         conversationId: selectedConversationId ?? '',
         senderId: userId,
         content,
@@ -205,40 +204,78 @@ export default function ChatArea() {
       setLocalMessages((prev) => [...prev, optimistic]);
       scrollToBottom();
 
-      void (async () => {
-        const sent = await sendWebRTCMessage(content);
-        if (!sent) {
+      try {
+        // Wait for delivery acknowledgement from the remote peer
+        const ackReceived = await sendWebRTCMessage(content);
+
+        if (ackReceived) {
           setLocalMessages((prev) =>
             prev.map((m) =>
-              m.id === optimisticId ? { ...m, status: 'failed' } : m,
+              m.id === messageId ? { ...m, status: 'delivered' } : m,
             ),
           );
-          setError('Failed to send message.');
-          isSendingRef.current = false;
-          return;
+        } else {
+          setLocalMessages((prev) =>
+            prev.map((m) =>
+              m.id === messageId ? { ...m, status: 'failed' } : m,
+            ),
+          );
+          setError('Message delivery failed.');
         }
-
-        // Persist to backend
-        try {
-          await authFetch('/api/messages', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              conversationId: selectedConversationId,
-              content,
-            }),
-          });
-        } catch {
-          // Persistence is best-effort
-        }
-
+      } catch {
         setLocalMessages((prev) =>
-          prev.map((m) => (m.id === optimisticId ? { ...m, status: 'sent' } : m)),
+          prev.map((m) =>
+            m.id === messageId ? { ...m, status: 'failed' } : m,
+          ),
         );
+        setError('Message delivery timed out.');
+      } finally {
         isSendingRef.current = false;
-      })();
+      }
     },
     [userId, isDataChannelOpen, selectedConversationId, sendWebRTCMessage, scrollToBottom],
+  );
+
+  const retryMessage = useCallback(
+    (messageId: string) => {
+      const message = localMessages.find((m) => m.id === messageId);
+      if (!message || message.status !== 'failed') return;
+
+      setLocalMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, status: 'sending' } : m,
+        ),
+      );
+
+      void (async () => {
+        try {
+          const ackReceived = await sendWebRTCMessage(message.content);
+
+          if (ackReceived) {
+            setLocalMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId ? { ...m, status: 'delivered' } : m,
+              ),
+            );
+          } else {
+            setLocalMessages((prev) =>
+              prev.map((m) =>
+                m.id === messageId ? { ...m, status: 'failed' } : m,
+              ),
+            );
+            setError('Message delivery failed.');
+          }
+        } catch {
+          setLocalMessages((prev) =>
+            prev.map((m) =>
+              m.id === messageId ? { ...m, status: 'failed' } : m,
+            ),
+          );
+          setError('Message delivery timed out.');
+        }
+      })();
+    },
+    [localMessages, sendWebRTCMessage],
   );
 
   // Empty State
@@ -374,6 +411,7 @@ export default function ChatArea() {
                 showDateSeparator={false}
                 dateLabel=""
                 prevMessage={prevMsg}
+                onRetry={retryMessage}
               />
             </div>
           );
