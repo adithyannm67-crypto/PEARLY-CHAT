@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   MessageCircle,
-  MoreVertical,
+  RefreshCw,
   ArrowLeft,
 } from 'lucide-react';
 import Avatar from '@/components/Avatar';
@@ -363,10 +363,11 @@ export default function ChatArea() {
           />
           <button
             type="button"
-            aria-label="More options"
+            aria-label="Refresh"
+            onClick={() => window.location.reload()}
             className="p-2 rounded-lg hover:bg-surface text-text-secondary hover:text-text-primary transition-colors cursor-pointer touch-target"
           >
-            <MoreVertical size={18} />
+            <RefreshCw size={18} />
           </button>
         </div>
       </header>
