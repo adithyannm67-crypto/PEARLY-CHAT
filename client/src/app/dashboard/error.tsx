@@ -25,16 +25,24 @@ export default function Error({
         Something went wrong!
       </h2>
 
-      <p className="mb-6 max-w-md text-sm text-muted-foreground">
-        An unexpected error occurred. Please try again.
-      </p>
+  <p className="mb-6 max-w-md text-sm text-muted-foreground">
+    {error?.message || 'An unexpected error occurred. Please try again.'}
+  </p>
 
-      <button
-        onClick={() => reset()}
-        className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
-      >
-        Try again
-      </button>
+  <div className="flex gap-3">
+    <button
+      onClick={() => reset()}
+      className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
+    >
+      Try again
+    </button>
+    <button
+      onClick={() => (window.location.href = '/auth/login')}
+      className="rounded-lg border border-border-custom px-6 py-2.5 text-sm font-medium text-text-primary transition-opacity hover:opacity-90"
+    >
+      Go to login
+    </button>
+  </div>
     </div>
   );
 }
