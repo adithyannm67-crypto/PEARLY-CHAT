@@ -113,22 +113,15 @@ export function useWebRTC({
 
     // Auto-rejoin the conversation if we have one
     if (convId && userIdVal) {
+      // Properly narrow types since we've verified convId is truthy
       client.setLastConversationId(convId);
-      client.joinRoom(convId!);
-      log('[WebRTC]', convId!, 'auto-rejoined conversation after reconnect');
+      client.joinRoom(convId);
+      log('[WebRTC]', convId, 'auto-rejoined conversation after reconnect');
     }
 
     // Reinitialize the peer connection manager with the conversation
-    if (convId && userIdVal) {
-      /* TypeScript narrowing issue - convId is string | null but we know it's truthy here */
-      const conversationId: string = convId;
-      peerManagerRef.current?.init(
-        userIdVal,
-        peerUserIdRef.current || null,
-        conversationId,
-        iceServersRef.current,
-      );
-    }
+    // After truthy check, use non-null assertions - values are guaranteed non-null
+    peerManagerRef.current?.init(userId!, peerUserIdRef.current!, convId!, iceServersRef.current);
   }, []);
 
   useEffect(() => {
