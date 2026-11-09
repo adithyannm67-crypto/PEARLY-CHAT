@@ -7,6 +7,9 @@ const MAX_PARTICIPANTS = 2;
 const HEARTBEAT_INTERVAL = 30000;
 const HEARTBEAT_TIMEOUT = 5000;
 
+// Global userId -> Set<WebSocket> tracking all authenticated sockets per user.
+const userSockets = new Map();
+
 // conversationId -> { sockets: Set<WebSocket>, participants: Map<userId, Set<WebSocket>> }
 const rooms = new Map();
 
@@ -89,6 +92,14 @@ function isAuthenticated(socket) {
   return Boolean(socket.authenticated && socket.userId);
 }
 
+async function updateUserOnlineStatus(userId: string, isOnline: boolean) {
+  try {
+    await supabase.from('users').update({ is_online: isOnline }).eq('id', userId);
+  } catch (err) {
+    console.error('[ws] failed to update user online status:', err);
+  }
+}
+
 function broadcast(room, excludeSocket, payload) {
   for (const socket of room.sockets) {
     if (socket !== excludeSocket && socket.readyState === WebSocket.OPEN) {
@@ -128,6 +139,11 @@ function removeSocketFromRoom(socket, conversationId) {
         });
       }
     }
+    // Update global user online status when this socket is the last one for the user
+    const globalSockets = userSockets.get(socket.userId);
+    if (globalSockets && globalSockets.size === 0) {
+      updateUserOnlineStatus(socket.userId, false);
+    }
   }
 
   if (room.sockets.size === 0) {
@@ -136,6 +152,16 @@ function removeSocketFromRoom(socket, conversationId) {
 }
 
 function handleClose(socket) {
+  // Remove from global user sockets map
+  if (socket.userId && userSockets.has(socket.userId)) {
+    userSockets.get(socket.userId).delete(socket);
+    if (userSockets.get(socket.userId)?.size === 0) {
+      userSockets.delete(socket.userId);
+      // Update online status since this was the last socket
+      updateUserOnlineStatus(socket.userId, false);
+    }
+  }
+
   for (const conversationId of [...socket.rooms]) {
     removeSocketFromRoom(socket, conversationId);
   }
@@ -208,6 +234,17 @@ async function handleJoinRoom(socket, payload) {
     }
   }
 
+  // Track this socket in the global user sockets map
+  if (socket.userId) {
+    if (!userSockets.has(socket.userId)) {
+      userSockets.set(socket.userId, new Set());
+    }
+    userSockets.get(socket.userId).add(socket);
+  }
+
+  // Update global user online status when joining a room (user is now active online)
+  await updateUserOnlineStatus(socket.userId, true);
+
   room.sockets.add(socket);
   if (!room.participants.has(socket.userId)) {
     room.participants.set(socket.userId, new Set());
@@ -264,6 +301,14 @@ function handleLeaveRoom(socket, payload) {
 
   if (!conversationId || typeof conversationId !== "string") {
     return sendError(socket, "INVALID_PAYLOAD", "conversationId is required");
+  }
+
+  // Remove from global user sockets map
+  if (socket.userId && userSockets.has(socket.userId)) {
+    userSockets.get(socket.userId).delete(socket);
+    if (userSockets.get(socket.userId)?.size === 0) {
+      userSockets.delete(socket.userId);
+    }
   }
 
   removeSocketFromRoom(socket, conversationId);

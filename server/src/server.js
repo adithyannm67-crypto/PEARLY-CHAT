@@ -1,7 +1,7 @@
 import http from "http";
 import { env } from "./config/env.js";
 import { WebSocketServer } from "ws";
-import { setupSignaling } from "./ws/signaling.js";
+import { setupSignaling } from "./ws/signaling.ts";
 import signinHandler from "./api/auth/signin/route.js";
 import signupHandler from "./api/auth/signup/route.js";
 import logoutHandler from "./api/auth/logout/route.js";
