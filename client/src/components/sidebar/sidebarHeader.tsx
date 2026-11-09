@@ -10,9 +10,8 @@ interface SidebarHeaderProps {
     sentConnectionRequests: ConnectionRequest[];
     handleLogout: () => void;
     setActiveModal: (modal: 'new-chat' | 'settings' | null) => void;
-    isOwnOnline: boolean;
 }
-const SidebarHeader = ({ currentUser, setRequestsOpen, connectionRequests, sentConnectionRequests, handleLogout, setActiveModal, isOwnOnline }: SidebarHeaderProps) => {
+const SidebarHeader = ({ currentUser, setRequestsOpen, connectionRequests, sentConnectionRequests, handleLogout, setActiveModal }: SidebarHeaderProps) => {
     const bellSize = typeof window !== 'undefined' && window.innerWidth >= 640 ? 18 : 16;
     const penSize = typeof window !== 'undefined' && window.innerWidth >= 640 ? 18 : 16;
     const settingsSize = typeof window !== 'undefined' && window.innerWidth >= 640 ? 18 : 16;
@@ -23,7 +22,6 @@ const SidebarHeader = ({ currentUser, setRequestsOpen, connectionRequests, sentC
             <Avatar
                 initials={currentUser?.avatar ?? '?'}
                 size="sm"
-                showOnline={isOwnOnline}
             />
             <span className="font-semibold text-base sm:text-lg text-text-primary">Chats</span>
         </div>

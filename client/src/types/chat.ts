@@ -4,8 +4,6 @@ export interface ChatUser {
   username: string;
   email: string;
   avatar: string;
-  status: "online" | "offline" | "away";
-  lastSeen: string;
 }
 
 export interface Conversation {

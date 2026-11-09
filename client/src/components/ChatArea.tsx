@@ -25,7 +25,7 @@ function getDateKey(ts: string): string {
 }
 
 function formatDateLabel(dateString: string): string {
-  const dateKey = getDateKey(dateString);
+  const dateKey = dateString;
   if (!dateKey) return '';
   const [yearStr, monthStr, dayStr] = dateKey.split('-');
   const targetDate = new Date(Number(yearStr), Number(monthStr) - 1, Number(dayStr));
@@ -50,7 +50,6 @@ export default function ChatArea() {
     userId,
     selectedConversation,
     handleBack,
-    onlineUsers,
     webrtcConnectionState,
     isDataChannelOpen,
     webrtcMessages,
@@ -349,24 +348,12 @@ export default function ChatArea() {
         <Avatar
           initials={otherUser.avatar}
           size="md"
-          showOnline={onlineUsers.get(otherUser.id) === true}
         />
 
         <div className="flex-1 min-w-0">
           <h2 className="font-medium text-text-primary truncate">
             {otherUser.name}
           </h2>
-          <p className="text-xs">
-            {onlineUsers.get(otherUser.id) === true ? (
-              <span className="text-online font-medium">Online</span>
-            ) : (
-              <span className="text-text-secondary">
-                {otherUser.lastSeen
-                  ? `Last seen ${formatDateLabel(otherUser.lastSeen)}`
-                  : 'Offline'}
-              </span>
-            )}
-          </p>
         </div>
 
         <div className="flex items-center gap-1">

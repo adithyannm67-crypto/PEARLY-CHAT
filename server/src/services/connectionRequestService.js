@@ -27,8 +27,6 @@ function mapUser(row) {
     username: row.username || "",
     email: row.email || "",
     avatar: getInitials(row.full_name, row.username),
-    status: "offline",
-    lastSeen: "",
   };
 }
 

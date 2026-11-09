@@ -92,14 +92,6 @@ function isAuthenticated(socket) {
   return Boolean(socket.authenticated && socket.userId);
 }
 
-async function updateUserOnlineStatus(userId: string, isOnline: boolean) {
-  try {
-    await supabase.from('users').update({ is_online: isOnline }).eq('id', userId);
-  } catch (err) {
-    console.error('[ws] failed to update user online status:', err);
-  }
-}
-
 function broadcast(room, excludeSocket, payload) {
   for (const socket of room.sockets) {
     if (socket !== excludeSocket && socket.readyState === WebSocket.OPEN) {
@@ -139,11 +131,7 @@ function removeSocketFromRoom(socket, conversationId) {
         });
       }
     }
-    // Update global user online status when this socket is the last one for the user
-    const globalSockets = userSockets.get(socket.userId);
-    if (globalSockets && globalSockets.size === 0) {
-      updateUserOnlineStatus(socket.userId, false);
-    }
+    // (presence DB tracking removed)
   }
 
   if (room.sockets.size === 0) {
@@ -157,8 +145,6 @@ function handleClose(socket) {
     userSockets.get(socket.userId).delete(socket);
     if (userSockets.get(socket.userId)?.size === 0) {
       userSockets.delete(socket.userId);
-      // Update online status since this was the last socket
-      updateUserOnlineStatus(socket.userId, false);
     }
   }
 
@@ -241,9 +227,6 @@ async function handleJoinRoom(socket, payload) {
     }
     userSockets.get(socket.userId).add(socket);
   }
-
-  // Update global user online status when joining a room (user is now active online)
-  await updateUserOnlineStatus(socket.userId, true);
 
   room.sockets.add(socket);
   if (!room.participants.has(socket.userId)) {
