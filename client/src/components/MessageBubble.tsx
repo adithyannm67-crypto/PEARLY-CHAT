@@ -65,7 +65,7 @@ export default function MessageBubble({
 
       {/* Message row */}
       <div className={`flex w-full ${alignClass} ${isFirstInGroup ? 'mt-3' : 'mt-1'}`}>
-        {/* Avatar for received messages (first in group only) */}
+        {/* Avatar id  for received messages (first in group only) */}
         {!isSent && isFirstInGroup && (
           <div className="ml-2 mt-1 flex-shrink-0">
             <div className="w-6 h-6 rounded-full bg-surface/50 flex items-center justify-center text-[10px] font-medium text-text-secondary">

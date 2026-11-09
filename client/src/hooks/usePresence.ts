@@ -48,7 +48,7 @@ export function usePresence(userId: string | null): UsePresenceReturn {
     async (isOnline: boolean) => {
       if (!userId) return;
       try {
-        await authFetch('/api/users', {
+        const response = await authFetch('/api/users', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -56,9 +56,14 @@ export function usePresence(userId: string | null): UsePresenceReturn {
             last_seen: new Date().toISOString(),
           }),
         });
-        setIsOwnOnline(isOnline);
-      } catch {
-        // Presence updates are best-effort.
+        if (response.ok) {
+          setIsOwnOnline(isOnline);
+        } else {
+          const errorText = await response.text().catch(() => 'Unknown error');
+          console.error('[usePresence] Failed to update user online status via API:', response.status, errorText);
+        }
+      } catch (err) {
+        console.error('[usePresence] Error updating user online status:', err);
       }
     },
     [userId]
@@ -124,8 +129,8 @@ export function usePresence(userId: string | null): UsePresenceReturn {
           });
           setIsOwnOnline(true);
           syncPresence();
-        } catch {
-          // Ignore track errors on subscribe.
+        } catch (err) {
+          console.error('[usePresence] Error tracking presence channel:', err);
         }
       }
     });
