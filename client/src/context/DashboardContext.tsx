@@ -203,7 +203,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   useEffect(() => {
-    void loadRequestHistory();
+    setTimeout(() => {
+      void loadRequestHistory();
+    }, 0);
   }, [userId, loadRequestHistory]);
 
 

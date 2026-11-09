@@ -35,6 +35,7 @@ class DataChannelManager {
   private handlers: DataChannelHandlers = {};
   private state: DataChannelState = 'closed';
   private isClosing = false;
+  private seenMessageIds = new Set<string>();
 
   getState(): DataChannelState {
     return this.state;
@@ -45,6 +46,7 @@ class DataChannelManager {
   }
 
   attach(channel: RTCDataChannel) {
+    this.seenMessageIds.clear();
     this.channel = channel;
     this.state = 'connecting';
     this.isClosing = false;
@@ -80,6 +82,14 @@ class DataChannelManager {
           this.handlers.onAck?.(parsed.ackId);
           return;
         }
+
+        // Idempotent handling: if we've seen this message ID before (retry after lost ACK),
+        // do not deliver it again, but send another ACK so the sender can mark delivered.
+        if (this.seenMessageIds.has(parsed.id)) {
+          this.sendAck(parsed.id, parsed.senderId);
+          return;
+        }
+        this.seenMessageIds.add(parsed.id);
 
         this.handlers.onMessage?.(parsed);
 
@@ -162,6 +172,7 @@ class DataChannelManager {
   }
 
   close() {
+    this.seenMessageIds.clear();
     this.isClosing = true;
     if (this.channel) {
       this.channel.close();

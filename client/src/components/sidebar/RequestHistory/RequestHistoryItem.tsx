@@ -22,7 +22,7 @@ export default function RequestHistoryItem({
   onCancel?: (requestId: string) => void;
   busy?: boolean;
 }) {
-  const incoming = userId ? request.receiverId === userId : (request as any).direction === 'incoming';
+  const incoming = userId ? request.receiverId === userId : false;
 
   return (
     <div className="flex items-center gap-3 p-3 sm:p-4 border-b border-border-custom/40">

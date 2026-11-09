@@ -1,9 +1,9 @@
 
 import { useEffect } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database";
+import type { Database } from "../types/database";
 
-import type { Conversation } from "@/types/chat";
+import type { Conversation } from "../types/chat";
 
 type RealtimeHandlers = {
   userId: string | null;

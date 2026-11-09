@@ -3,8 +3,8 @@
 import React, { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import AuthLayout from "@/components/AuthLayout";
-import { useSupabase } from "@/context/AuthProvider";
+import AuthLayout from "../../../components/AuthLayout";
+import { useSupabase } from "../../../context/AuthProvider";
 import { Mail, ArrowLeft } from "lucide-react";
 
 export default function ForgotPasswordPage() {

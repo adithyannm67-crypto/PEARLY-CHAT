@@ -32,7 +32,7 @@ import OfflineBanner from '@/components/OfflineBanner';
 import { NotificationProvider } from '@/context/NotificationContext';
 import NotificationCenter from '@/components/NotificationCenter';
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"

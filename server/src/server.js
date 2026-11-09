@@ -13,12 +13,31 @@ import usersHandler from "./api/users/route.js";
 import iceConfigHandler from "./api/ice-config/route.js";
 import * as responseHandler from "#utils/responseHandler.js";
 import handlePreflight from "#utils/handlePreflight.js";
+import { isOriginAllowed } from "#utils/allowedOrigins.js";
 import parseCookies from "#utils/parseCookies.js";
 
 const isProduction = env.NODE_ENV === "production";
 
 const server = http.createServer(async (req, res) => {
   if (handlePreflight(req, res)) return;
+
+  // CSRF hardening for cookie-authenticated state-changing requests.
+  // Browsers send Origin on cross-origin and modern same-origin fetches; reject
+  // disallowed or cross-site origins. Missing Origin is allowed to avoid
+  // breaking non-browser clients, while JSON Content-Type enforcement and
+  // SameSite=Lax cookies reduce CSRF risk.
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    const origin = req.headers.origin;
+    const secFetchSite = req.headers["sec-fetch-site"];
+    if (!isOriginAllowed(origin)) {
+      responseHandler.errorResponse(res, "Forbidden origin", 403);
+      return;
+    }
+    if (!origin && secFetchSite === "cross-site") {
+      responseHandler.errorResponse(res, "Forbidden cross-site request", 403);
+      return;
+    }
+  }
 
   if (!isProduction) {
     console.log(req.method, req.url);

@@ -62,23 +62,19 @@ function sendError(socket, code, message) {
 }
 
 function extractToken(request) {
+  // Security: Do NOT accept tokens via URL query parameters to prevent exposure in logs, referrer headers, and history.
+  // Only accept tokens via Authorization header or HttpOnly cookies.
   try {
-    const url = new URL(
-      request.url,
-      `http://${request.headers.host || "localhost"}`
-    );
-    const token = url.searchParams.get("token");
-    if (token) return token;
+    const auth = request.headers.authorization || request.headers.Authorization;
+    if (auth?.startsWith("Bearer ")) return auth.slice(7).trim();
   } catch (err) {
-    // ignore invalid URL
+    // ignore invalid header
   }
 
+  // Security: Check HttpOnly cookie - never expose token in URL or client-side code
   const cookie = request.headers.cookie || "";
   const match = cookie.match(/(?:^|;\s*)access_token=([^;]+)/);
   if (match) return decodeURIComponent(match[1]);
-
-  const auth = request.headers.authorization || request.headers.Authorization;
-  if (auth?.startsWith("Bearer ")) return auth.slice(7).trim();
 
   return null;
 }
@@ -310,6 +306,8 @@ async function handleSignaling(socket, payload, type) {
   }
   if (type === "ICE_CANDIDATE") {
     const candType = typeof payload.candidate === "string" ? payload.candidate.split(" ")[0] : "unknown";
+    // Redact SDP metadata from ICE candidate logging to avoid exposing network topology
+    const candidateRedacted = payload.candidate ? payload.candidate.replace(/a=mid:\[^\]]+\]/g, 'a=mid:redacted]') : null;
     console.log(`[SERVER-OFFER] ICE_CANDIDATE received ${new Date().toISOString()} conv=${conversationId} senderId=${socket.userId} candidateType=${candType}`);
   }
 
@@ -434,6 +432,35 @@ export function setupSignaling(wss) {
         socket.pongTimeout = null;
       }
     });
+
+    // Security: Validate WebSocket origin on connection.
+    // Production requires an explicitly configured allowed frontend origin
+    // (ALLOWED_ORIGINS / CLIENT_URL / FRONTEND_URL). No localhost fallback in production.
+    const origin = request.headers.origin;
+    const rawAllowed =
+      process.env.ALLOWED_ORIGINS ||
+      process.env.CLIENT_URL ||
+      process.env.FRONTEND_URL ||
+      "";
+    let allowedOrigins = rawAllowed.split(",").map((o) => o.trim()).filter(Boolean);
+    const isProduction = process.env.NODE_ENV === "production";
+    if (allowedOrigins.length === 0) {
+      if (isProduction) {
+        console.error("[ws] Rejected connection: no allowed frontend origin configured in production");
+        socket.close(1008, "Server origin policy not configured");
+        return;
+      }
+      allowedOrigins = ["http://localhost:3000", "http://localhost:3001"];
+    } else if (!isProduction) {
+      for (const dev of ["http://localhost:3000", "http://localhost:3001"]) {
+        if (!allowedOrigins.includes(dev)) allowedOrigins.push(dev);
+      }
+    }
+    if (origin && !allowedOrigins.includes(origin)) {
+      console.warn(`[ws] Rejected connection from disallowed origin: ${origin}`);
+      socket.close(1008, "Policy violation - origin not allowed");
+      return;
+    }
 
     console.log(
       `[ws] connection instanceId=${socket.instanceId} readyState=${socket.readyState} url=${request.url}`

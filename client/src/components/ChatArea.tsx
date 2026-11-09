@@ -98,28 +98,32 @@ export default function ChatArea() {
   useEffect(() => {
     if (webrtcMessages.length === 0) return;
 
-    setLocalMessages((previous) => {
-      const incoming = webrtcMessages.filter(
-        (m) => !previous.some((p) => p.id === m.id),
-      );
-      const mapped: Message[] = incoming.map((m) => ({
-        id: m.id,
-        conversationId: selectedConversationId ?? '',
-        senderId: m.senderId,
-        content: m.content,
-        timestamp: m.timestamp,
-        status: 'delivered',
-      }));
-      return [...previous, ...mapped];
-    });
-  }, [webrtcMessages, selectedConversationId]);
+    const incomingMessages = webrtcMessages.filter(
+      (m) => !localMessages.some((p) => p.id === m.id),
+    );
+    const mappedMessages: Message[] = incomingMessages.map((m) => ({
+      id: m.id,
+      conversationId: selectedConversationId ?? '',
+      senderId: m.senderId,
+      content: m.content,
+      timestamp: m.timestamp,
+      status: 'delivered',
+    }));
+
+    // Defer state update to avoid cascading renders in effect
+    setTimeout(() => {
+      setLocalMessages((previous) => [...previous, ...mappedMessages]);
+    }, 0);
+  }, [webrtcMessages, localMessages, selectedConversationId]);
 
   // When selectedConversationId changes, clear messages and fetch from the API
   useEffect(() => {
     if (!selectedConversationId) {
-      setLocalMessages([]);
-      setLoading(false);
-      setError('');
+      setTimeout(() => {
+        setLocalMessages([]);
+        setLoading(false);
+        setError('');
+      }, 0);
       return;
     }
 

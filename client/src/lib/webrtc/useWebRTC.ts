@@ -387,7 +387,7 @@ export function useWebRTC({
       console.error('[webrtc] connect error:', err);
       setConnectionState('failed');
     }
-  }, [conversationId, userId]);
+  }, [conversationId, userId, supabase.auth]);
 
   const disconnect = useCallback(() => {
     const convId = currentConversationId.current;
@@ -421,10 +421,11 @@ export function useWebRTC({
       const messageId = crypto.randomUUID();
       const sent = dataChannelRef.current?.send(content, userId, messageId);
       if (!sent) {
+        // Could not deliver via data channel - surface failure to UI
         return false;
       }
 
-      // Wait for delivery acknowledgement with timeout
+      // Wait for delivery acknowledgement from peer with timeout
       const ackReceived = await new Promise<boolean>((resolve, reject) => {
         const timeoutId = setTimeout(() => {
           pendingAcksRef.current.delete(messageId);
@@ -434,7 +435,8 @@ export function useWebRTC({
         pendingAcksRef.current.set(messageId, { resolve, reject, timeoutId });
       });
 
-      // Persist to backend for history across refreshes
+      // Persist to backend for history across refreshes (best-effort)
+      // This does not block message sending - delivery and persistence are separate concerns
       try {
         await authFetch('/api/messages', {
           method: 'POST',
@@ -444,10 +446,13 @@ export function useWebRTC({
             content,
           }),
         });
-      } catch {
-        // Persistence is best-effort; message still sent via data channel.
+      } catch (persistError) {
+        // Surface persistence failure but do not block delivery
+        log('[webrtc]', null, 'message persistence failure', { error: persistError });
+        // Could add notification here if desired
       }
 
+      // Return whether delivery ACK was received, not persistence status
       return ackReceived;
     },
     [userId],

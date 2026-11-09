@@ -1,15 +1,8 @@
-function getAllowedOrigins() {
-  const configured = process.env.ALLOWED_ORIGINS || process.env.CLIENT_URL || "http://localhost:3000";
-  return configured
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-}
+import { getAllowedOrigins, isOriginAllowed } from "#utils/allowedOrigins.js";
 
 export default function handlePreflight(req, res) {
   const origin = req.headers.origin;
-  const allowedOrigins = getAllowedOrigins();
-  const isAllowed = !origin || allowedOrigins.includes(origin);
+  const isAllowed = isOriginAllowed(origin);
 
   if (origin && isAllowed) {
     res.setHeader("Access-Control-Allow-Origin", origin);

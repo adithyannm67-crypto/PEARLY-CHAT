@@ -3,8 +3,8 @@
 import React, { useState, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import AuthLayout from "@/components/AuthLayout";
-import { useSupabase } from "@/context/AuthProvider";
+import AuthLayout from "../../../components/AuthLayout";
+import { useSupabase } from "../../../context/AuthProvider";
 import {
   User,
   Mail,

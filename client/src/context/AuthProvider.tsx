@@ -2,10 +2,10 @@
 
 import { useEffect, useState, createContext, type ReactNode, useContext } from 'react';
 import { type SupabaseClient, type User } from '@supabase/supabase-js';
-import { supabase as browserSupabase } from '@/lib/supabase/client';
-import { requireSupabaseEnv } from '@/lib/supabase/client';
-import { authFetch } from '@/lib/authFetch';
-import { useNotifications } from '@/context/NotificationContext';
+import { supabase as browserSupabase } from '../lib/supabase/client';
+import { requireSupabaseEnv } from '../lib/supabase/client';
+import { authFetch } from '../lib/authFetch';
+import { useNotifications } from './NotificationContext';
 
 type Session = {
   user: User | null;

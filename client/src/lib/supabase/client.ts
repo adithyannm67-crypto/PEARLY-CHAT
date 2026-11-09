@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/database";
+import type { Database } from "../../types/database";
 
 // Create a single supa client for browser use. It is bound to the browser
 // session automatically via the `auth.getSession()` call.

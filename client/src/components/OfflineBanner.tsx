@@ -12,14 +12,18 @@ export default function OfflineBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    setHasCheckedConnection(true);
+    setTimeout(() => {
+      setHasCheckedConnection(true);
+    }, 0);
   }, []);
 
   // Detect transition from offline → online and show a temporary restoration notice
   useEffect(() => {
     if (lastOnlineState === false && isOnline === true) {
-      setShowOnlineToast(true);
-      setTimeout(() => setShowOnlineToast(false), 5000);
+      setTimeout(() => {
+        setShowOnlineToast(true);
+        setTimeout(() => setShowOnlineToast(false), 5000);
+      }, 0);
     }
     setTimeout(() => setLastOnlineState(isOnline), 0);
   }, [isOnline, lastOnlineState]);

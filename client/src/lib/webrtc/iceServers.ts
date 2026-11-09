@@ -1,5 +1,5 @@
-import { authFetch } from "@/lib/authFetch";
-import { SERVER_URL } from "@/lib/serverProxy";
+import { authFetch } from "../authFetch";
+import { SERVER_URL } from "../serverProxy";
 
 type IceServer = { urls: string; username?: string; credential?: string };
 
