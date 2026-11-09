@@ -19,7 +19,8 @@ export default function AuthCallbackPage() {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
-          if (!cancelled) router.replace('/dashboard');
+          const type = params.get('type');
+          if (!cancelled) router.replace(type === 'recovery' ? '/auth/login' : '/dashboard');
           return;
         }
       }
@@ -35,7 +36,8 @@ export default function AuthCallbackPage() {
         });
 
         if (!error) {
-          if (!cancelled) router.replace('/dashboard');
+          const type = params.get('type') || hash.get('type');
+          if (!cancelled) router.replace(type === 'recovery' ? '/auth/login' : '/dashboard');
           return;
         }
       }
