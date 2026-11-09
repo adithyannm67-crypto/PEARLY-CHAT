@@ -114,6 +114,8 @@ function removeSocketFromRoom(socket, conversationId) {
   socket.rooms.delete(conversationId);
 
   if (socket.userId) {
+    // Track that this socket just left a conversation (for reconnect detection)
+    socket._leftConversation = conversationId;
     const userSockets = room.participants.get(socket.userId);
     const userFullyLeft = !userSockets || userSockets.size === 0;
     if (userFullyLeft) {
@@ -223,6 +225,27 @@ async function handleJoinRoom(socket, payload) {
     participantCount: room.participants.size,
     participantIds: otherParticipantIds,
   });
+
+  // Detect reconnection: if socket just left this conversation, it's a reconnect
+  const isReconnect = socket._leftConversation === conversationId;
+
+  if (isReconnect) {
+    // Broadcast PEER_RECONNECTED to the other participant, not the reconnecting peer
+    const reconnectingUserId = socket.userId;
+    const otherParticipantId = [...room.participants.keys()].find((id) => id !== reconnectingUserId);
+    if (otherParticipantId) {
+      const otherSocket = [...room.sockets].find((s) => s.userId === otherParticipantId);
+      if (otherSocket && otherSocket.readyState === WebSocket.OPEN) {
+        send(otherSocket, {
+          type: "PEER_RECONNECTED",
+          conversationId,
+          userId: reconnectingUserId,
+        });
+      }
+    }
+    // Clear the tracked left conversation
+    socket._leftConversation = null;
+  }
 
   if (!alreadyJoined) {
     const others = [...room.sockets].filter((s) => s.userId !== socket.userId);

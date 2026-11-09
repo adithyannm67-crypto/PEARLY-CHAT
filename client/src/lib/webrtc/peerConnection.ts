@@ -235,12 +235,12 @@ class PeerConnectionManager {
   async init(
     localUserId: string,
     peerUserId: string,
-    conversationId: string,
+    conversationId: string | null,
     iceServers?: IceServer[],
   ): Promise<void> {
     this.localUserId = localUserId;
     this.peerUserId = peerUserId;
-    this.conversationId = conversationId;
+    this.conversationId = conversationId ?? null;
     this.polite = localUserId > peerUserId;
     this.dataChannelOwner = this.polite;
 

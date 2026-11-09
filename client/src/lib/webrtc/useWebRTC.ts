@@ -104,7 +104,31 @@ export function useWebRTC({
   const reconnect = useCallback(async () => {
     const client = signalingClientRef.current;
     if (!client) return;
+
+    // Get the current conversation to rejoin after reconnect
+    const convId = currentConversationId.current;
+    const userIdVal = localUserId.current;
+
     await client.reconnect();
+
+    // Auto-rejoin the conversation if we have one
+    if (convId && userIdVal) {
+      client.setLastConversationId(convId);
+      client.joinRoom(convId!);
+      log('[WebRTC]', convId!, 'auto-rejoined conversation after reconnect');
+    }
+
+    // Reinitialize the peer connection manager with the conversation
+    if (convId && userIdVal) {
+      /* TypeScript narrowing issue - convId is string | null but we know it's truthy here */
+      const conversationId: string = convId;
+      peerManagerRef.current?.init(
+        userIdVal,
+        peerUserIdRef.current || null,
+        conversationId,
+        iceServersRef.current,
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -191,6 +215,17 @@ export function useWebRTC({
         setConnectionState('disconnected');
         manager?.close();
         channelMgr?.close();
+      },
+      onPeerReconnected: (_conversationId: string, peerUserId: string) => {
+        log('[WS]', null, 'peer reconnected');
+
+        // Peer has reconnected - we can resume ICE negotiation
+        // The connection should be restored as the signaling channel is active
+        setConnectionState('connecting');
+        // Trigger ICE reconnection by restarting ICE
+        if (manager) {
+          manager.restartIce();
+        }
       },
       onOffer: async (_senderId, _conversationId, sdp) => {
         log(

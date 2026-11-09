@@ -24,6 +24,7 @@ type SignalingHandlers = {
   onRoomJoined?: (conversationId: string, participantCount: number, participantIds: string[]) => void;
   onPeerJoined?: (conversationId: string, userId: string) => void;
   onPeerLeft?: (conversationId: string, userId: string) => void;
+  onPeerReconnected?: (conversationId: string, userId: string) => void;
   onOffer?: (senderId: string, conversationId: string, sdp: string) => void;
   onAnswer?: (senderId: string, conversationId: string, sdp: string) => void;
   onIceCandidate?: (
@@ -70,12 +71,17 @@ class SignalingClient {
   private authPromiseResolve: ((userId: string) => void) | null = null;
   private authPromiseReject: ((err: Error) => void) | null = null;
   private isManualReconnect = false;
+  private lastConversationId: string | null = null;
 
   constructor(handlers: SignalingHandlers = {}) {
     this.handlers = handlers;
     this.instanceId = crypto.randomUUID();
     const wsUrl = SERVER_URL!.replace(/^http(?=s?)/, 'ws');
     this.url = `${wsUrl}`;
+  }
+
+  setLastConversationId(conversationId: string): void {
+    this.lastConversationId = conversationId;
   }
 
   getState(): ConnectionState {
@@ -133,13 +139,13 @@ class SignalingClient {
           if (this.isManualReconnect) {
             this.handlers.onReconnected?.();
             this.isManualReconnect = false;
-          }
-
-          // Send AUTH exactly once per connection using the token from the query string.
-          // The server authenticates via the URL token and replies with AUTHENTICATED.
+          }// Send AUTH exactly once per connection using the token from the query string.
+          // The server authenticates via the Authorization header / cookies and replies with AUTHENTICATED.
+          // After authentication, auto-rejoin the last conversation if available.
           this.authPending = true;
           this.ws?.send(
             JSON.stringify({ type: 'AUTH', token: effectiveToken ?? '' }),
+
           );
 
           return new Promise<void>((authResolve, authReject) => {
@@ -170,6 +176,15 @@ class SignalingClient {
               instanceId: this.instanceId,
               generation: gen,
             });
+
+            // Auto-rejoin the last conversation if available
+            if (this.lastConversationId) {
+              this.joinRoom(this.lastConversationId);
+              log('[WS]', null, 'rejoining last conversation', {
+                conversationId: this.lastConversationId,
+              });
+            }
+
             resolve();
           });
         };
@@ -290,6 +305,8 @@ class SignalingClient {
           message.participantCount,
           message.participantIds,
         );
+        // Store last conversation ID for auto-rejoin on reconnect
+        this.lastConversationId = message.conversationId;
         break;
       case 'PEER_JOINED':
         this.handlers.onPeerJoined?.(message.conversationId, message.userId);
