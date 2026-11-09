@@ -30,6 +30,8 @@ interface DashboardContextValue {
   router: ReturnType<typeof useRouter>;
 
   userId: string | null;
+  authLoading: boolean;
+  isAuthenticated: boolean;
   currentUser: ChatUser | null;
 
   conversations: Conversation[];
@@ -202,11 +204,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
 
 
-  useEffect(() => {
-    if (!authLoading && !userId) {
-      router.replace('/auth/login');
-    }
-  }, [authLoading, router, userId]);
+  // Unauthenticated access is handled by the dashboard error boundary.
 
   const handleSelectConversation = (id: string) => {
     if(id === selectedConversationId) return;
@@ -309,6 +307,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       signOut,
       router,
       userId,
+      authLoading,
+      isAuthenticated: Boolean(userId),
       currentUser: conversationsCurrentUser,
       conversations,
       setConversations,
@@ -374,6 +374,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       signOut,
       router,
       userId,
+      authLoading,
       conversationsCurrentUser,
       conversations,
       setConversations,

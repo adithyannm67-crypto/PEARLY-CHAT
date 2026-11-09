@@ -17,6 +17,8 @@ function DashboardInner() {
   const {
     supabase,
     userId,
+    authLoading,
+    isAuthenticated,
     setConversations,
     loadConversations,
     loadConnectionRequests,
@@ -34,6 +36,10 @@ function DashboardInner() {
     loadSentConnectionRequests,
     loadRequestHistory,
   });
+
+  if (!authLoading && !isAuthenticated) {
+    throw new Error('You must be signed in to access the dashboard.');
+  }
 
   return (
     <div className="h-full flex overflow-hidden dvh no-pull-to-refresh">
