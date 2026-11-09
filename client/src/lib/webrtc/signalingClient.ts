@@ -114,7 +114,7 @@ class SignalingClient {
 
     return new Promise((resolve, reject) => {
       try {
-        const ws = new WebSocket(`${this.url}?token=${encodeURIComponent(effectiveToken ?? '')}`);
+        const ws = new WebSocket(this.url);
         this.ws = ws;
 
         ws.onopen = () => {

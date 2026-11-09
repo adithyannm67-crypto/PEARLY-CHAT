@@ -13,13 +13,10 @@ import {
 export default async function handler(req) {
   const { user, accessToken } = await withAuth(req);
 
-  if (req.method === "GET") {
-    const { searchParams } = new URL(req.url, "http://localhost");
+  if (req.method === "GET") {const { searchParams } = new URL(req.url, "http://localhost");
     const direction = searchParams.get("direction") || "incoming";
-    const status = searchParams.get("status") || "PENDING";
-
-
-    
+    let status = searchParams.get("status") || "PENDING";
+    status = status.toUpperCase();
 
     // if (direction !== "incoming" && direction !== "outgoing") {
     //   throw new HttpError(400, "direction must be incoming or outgoing");
