@@ -4,7 +4,6 @@ import Sidebar from '@/components/Sidebar';
 import ChatArea from '@/components/ChatArea';
 import { DashboardProvider, useDashboard } from '@/context/DashboardContext';
 import { useDashboardRealtime } from '@/hooks/useDashboardRealtime';
-import { ArrowLeft } from 'lucide-react';
 
 export default function DashboardPage() {
   return (
@@ -24,7 +23,6 @@ function DashboardInner() {
     loadSentConnectionRequests,
     loadRequestHistory,
     showChat,
-    handleBack,
   } = useDashboard();
 
   useDashboardRealtime({
@@ -53,17 +51,7 @@ function DashboardInner() {
 
       <main className="flex-1 flex flex-col h-full min-w-0 overflow-hidden relative">
         {showChat ? (
-          <>
-            <ChatArea />
-            <button
-              type="button"
-              onClick={handleBack}
-              aria-label="Back to conversations"
-              className="absolute left-3 top-3 z-20 p-2 rounded-lg bg-black/60 text-white hover:bg-black/70 transition-colors cursor-pointer md:hidden touch-target"
-            >
-              <ArrowLeft size={20} />
-            </button>
-          </>
+          <ChatArea />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-bg-main">
             <div className="text-center">
