@@ -1,775 +1,375 @@
-# Peerly — Peer-to-Peer Chat Application
+# Peerly — Peer-to-Peer Chat
 
-Peerly is a real-time peer-to-peer chat application built using **WebRTC**, **Node.js**, **WebSocket**, **Next.js**, and **Supabase**.
+Peerly is a browser-based, one-to-one chat application. It uses **WebRTC DataChannels** to send live chat messages directly between two connected browsers. A **Node.js HTTP and WebSocket server** handles authentication-related API requests and WebRTC signaling, while **Supabase** provides authentication, PostgreSQL data storage, row-level security, and Realtime updates.
 
-The application allows users to connect and exchange messages directly between browsers using a WebRTC DataChannel. A Node.js WebSocket signaling server coordinates the initial connection by exchanging session descriptions and ICE candidates between peers.
+> **Architecture note:** WebRTC signaling is relayed through the backend, but chat payloads are sent over the peer-to-peer data channel after the WebRTC connection is established. The backend also receives a separate request to persist sent messages so conversation history can be loaded later.
 
-Once the WebRTC connection is established, chat messages are transmitted directly between the connected peers rather than being relayed through the signaling server.
+## Features present in the source
 
----
+- Account registration, sign-in, sign-out, password recovery, and the authentication callback flow.
+- Username-based and email-based sign-in support in the backend authentication flow.
+- User lookup and profile data, including username, full name, and avatar URL fields.
+- Direct conversation creation and conversation listing.
+- Connection requests, request status handling, and connection-request history.
+- One-to-one WebRTC connections using `RTCPeerConnection` and an RTCDataChannel.
+- WebSocket signaling for authentication, room membership, offers, answers, and ICE candidates.
+- WebRTC Perfect Negotiation with deterministic polite/impolite roles, offer-collision handling, and ICE-candidate queuing (as documented and implemented in the peer-connection client).
+- Data-channel message acknowledgements, duplicate-message suppression, and an acknowledgement timeout.
+- Best-effort message persistence through the backend messages API.
+- Supabase Realtime subscriptions for dashboard data changes and Supabase Realtime Presence for online-user state.
+- UI components for chat, typing indicators, notifications, connection status, offline state, settings, search, and request history.
 
-## Table of Contents
+The repository snapshot supplied for this README does **not** contain an implemented map or weather feature. Those features are therefore intentionally not described here.
 
-- [Project Overview](#project-overview)
-- [Objectives](#objectives)
-- [Features](#features)
-- [Technology Stack](#technology-stack)
-- [System Architecture](#system-architecture)
-- [How WebRTC Communication Works](#how-webrtc-communication-works)
-- [Project Structure](#project-structure)
-- [Prerequisites](#prerequisites)
-- [Installation and Setup](#installation-and-setup)
-- [Environment Variables](#environment-variables)
-- [Database Setup](#database-setup)
-- [Running the Application](#running-the-application)
-- [Testing the Application](#testing-the-application)
-- [Connection Status](#connection-status)
-- [WebRTC Implementation Details](#webrtc-implementation-details)
-- [Current Limitations](#current-limitations)
-- [Troubleshooting](#troubleshooting)
-- [Future Improvements](#future-improvements)
+## Technology stack
 
----
+### Frontend (`client/`)
 
-## Project Overview
+- Next.js 16 App Router
+- React 19
+- TypeScript and JavaScript
+- Supabase JavaScript client and `@supabase/ssr`
+- Tailwind CSS 4
+- Lucide React icons
+- Vitest, Testing Library, and JSDOM for client-side tests
 
-Peerly demonstrates real-time peer-to-peer communication using WebRTC.
+### Backend (`server/`)
 
-Traditional chat applications commonly route messages through a central server. Peerly uses a different approach: after two users establish a connection, messages are exchanged directly through a WebRTC DataChannel.
+- Node.js with ECMAScript modules
+- Native HTTP server
+- `ws` WebSocket server
+- Supabase JavaScript client
+- Twilio SDK for temporary TURN credentials
+- dotenv
+- Vitest and Supertest for backend tests
 
-A WebSocket signaling server is used only during connection establishment and negotiation.
+### Infrastructure
 
-The application also provides user authentication, conversation management, online presence, and message persistence using Supabase.
+- Supabase Auth and PostgreSQL
+- Supabase Row Level Security (RLS)
+- Supabase Realtime and Realtime Presence
+- WebRTC STUN/TURN ICE infrastructure
 
-### Main Goal
-
-To implement a working peer-to-peer messaging system using:
-
-- WebRTC for direct peer-to-peer communication.
-- WebRTC DataChannel for exchanging text messages.
-- Node.js for the backend server.
-- WebSocket for signaling between peers.
-- STUN servers for discovering public network addresses.
-- Supabase for authentication and database operations.
-
----
-
-## Objectives
-
-The primary objectives of this project are:
-
-1. Establish a peer-to-peer connection between two browsers using WebRTC.
-2. Implement real-time text messaging through an RTCDataChannel.
-3. Develop a Node.js WebSocket signaling server.
-4. Exchange WebRTC offers, answers, and ICE candidates through WebSocket.
-5. Display connection status to users.
-6. Handle peer connection and disconnection events.
-7. Store chat messages for conversation history.
-
----
-
-## Features
-
-### Core Features
-
-| Feature | Description | Status |
-|---|---|---|
-| User authentication | User signup and login using Supabase Auth | Implemented |
-| Conversation management | Create and manage direct conversations | Implemented |
-| WebRTC connection | Establish peer-to-peer connections | Implemented |
-| DataChannel messaging | Exchange text messages directly between peers | Implemented |
-| WebSocket signaling | Exchange offers, answers, and ICE candidates | Implemented |
-| Connection status | Display connection and disconnection states | Implemented |
-| STUN configuration | Use public STUN servers for ICE discovery | Implemented |
-| Message persistence | Save messages through the backend API | Implemented |
-| Online presence | Track online users using Supabase Realtime Presence | Implemented |
-
-### Additional Features
-
-- WebRTC Perfect Negotiation to handle simultaneous connection negotiations.
-- ICE candidate queuing and deduplication.
-- WebSocket authentication.
-- Conversation-based signaling rooms.
-- Connection request management.
-- Real-time presence updates.
-- Error handling and connection-state logging.
-
----
-
-## Technology Stack
-
-### Frontend
-
-- **Next.js 16** — React framework.
-- **React 19** — User interface.
-- **TypeScript** — Type safety.
-- **Tailwind CSS 4** — Styling.
-- **Lucide React** — Icons.
-
-### Backend
-
-- **Node.js** — Backend runtime.
-- **WebSocket (`ws`)** — WebSocket signaling server.
-- **HTTP module** — API server.
-- **Supabase JavaScript Client** — Authentication and database access.
-
-### Real-Time Communication
-
-- **WebRTC** — Peer-to-peer communication.
-- **RTCDataChannel** — Direct text message transmission.
-- **RTCPeerConnection** — Establish and manage peer connections.
-- **ICE** — Network path discovery.
-- **STUN** — Discover public-facing network addresses.
-- **WebSocket** — Exchange signaling information.
-
-### Database and Authentication
-
-- **Supabase Auth** — User authentication.
-- **Supabase PostgreSQL** — Persistent application data.
-- **Supabase Realtime** — Online presence and database events.
-
----
-
-## System Architecture
-
-Peerly uses a signaling-server architecture to establish direct peer-to-peer connections.
+## High-level architecture
 
 ```text
-             USER A                         USER B
-        ┌──────────────┐               ┌──────────────┐
-        │   Browser    │               │   Browser    │
-        │              │               │              │
-        │ RTCPeerConn  │               │ RTCPeerConn  │
-        │ DataChannel  │               │ DataChannel  │
-        └──────┬───────┘               └──────┬───────┘
-               │                              │
-               │       WebSocket Signaling    │
-               │                              │
-               ▼                              ▼
-        ┌──────────────────────────────────────────┐
-        │          Node.js Signaling Server        │
-        │                                          │
-        │  • Authentication                        │
-        │  • Room management                       │
-        │  • Offer / Answer forwarding             │
-        │  • ICE candidate forwarding              │
-        └──────────────────────────────────────────┘
-
-               │                              │
-               │      WebRTC Connection       │
-               └──────────────┬───────────────┘
+┌──────────────────────────┐              ┌──────────────────────────┐
+│       Browser A          │              │       Browser B          │
+│                          │              │                          │
+│ Next.js / React UI       │              │ Next.js / React UI       │
+│ Supabase client          │              │ Supabase client          │
+│ RTCPeerConnection        │              │ RTCPeerConnection        │
+│ RTCDataChannel           │◄────────────►│ RTCDataChannel           │
+└────────────┬─────────────┘   Chat data   └────────────┬─────────────┘
+             │                                         │
+             │ HTTPS API + WebSocket signaling         │
+             └────────────────┬────────────────────────┘
                               │
-                              ▼
-                   ┌────────────────────┐
-                   │   Direct P2P Chat  │
-                   │                    │
-                   │    RTCDataChannel  │
-                   │                    │
-                   │  User A ↔ User B   │
-                   └────────────────────┘
-
-                 ┌──────────────────────┐
-                 │       Supabase       │
-                 │                      │
-                 │ Authentication      │
-                 │ Database             │
-                 │ Realtime Presence    │
-                 └──────────────────────┘
+                    ┌─────────▼─────────┐
+                    │  Node.js backend │
+                    │                  │
+                    │ HTTP API         │
+                    │ WebSocket server │
+                    │ Signaling rooms  │
+                    └─────────┬────────┘
+                              │
+                       Supabase Auth /
+                       PostgreSQL / RLS
+                       Realtime / Presence
 ```
 
-### Important Architecture Detail
+The diagram separates the two communication paths:
 
-The WebSocket server does not relay normal chat messages.
+1. **Signaling and application API:** browsers communicate with the backend over HTTPS and WebSocket. The WebSocket server authenticates sockets, checks conversation membership, manages signaling rooms, and forwards WebRTC negotiation messages.
+2. **Chat transport:** once WebRTC is connected, text messages and delivery acknowledgements travel over the RTCDataChannel between the two browsers. The client separately calls the messages API to store a copy for history.
 
-It is responsible for signaling information required to establish the WebRTC connection.
+## WebRTC connection lifecycle
 
-After the connection is established, text messages travel through the RTCDataChannel directly between the two browsers.
+1. A signed-in user selects or opens a direct conversation.
+2. The client obtains the current Supabase access token and connects to the backend WebSocket endpoint.
+3. The client authenticates the socket and sends `JOIN_ROOM` with the conversation ID.
+4. The backend verifies that the authenticated user belongs to that conversation before admitting the socket to the room. The room is limited to two distinct participants.
+5. When the other participant joins, the clients initialize their peer-connection logic.
+6. The peers exchange `OFFER`, `ANSWER`, and `ICE_CANDIDATE` messages through the WebSocket signaling server.
+7. The client applies Perfect Negotiation logic to handle simultaneous offers and queues ICE candidates until they can be applied.
+8. When the RTCDataChannel opens, the clients can exchange chat messages directly.
+9. A received text message is deduplicated by message ID and acknowledged by the receiving peer.
+10. After the sender receives the acknowledgement, it attempts to persist the message through `POST /api/messages`. Persistence is best-effort and is separate from peer delivery.
 
-The application also uses its backend API to persist messages in the database.
+A WebSocket `ROOM_JOINED` or a WebRTC signaling state of `stable` alone does not mean chat is ready. The application also tracks the peer-connection and data-channel states.
 
----
+## WebSocket signaling protocol
 
-## How WebRTC Communication Works
+The server handles these client message types:
 
-The peer-to-peer connection is established through the following steps.
-
-### Step 1: User Authentication
-
-Both users sign in to Peerly.
-
-Supabase Auth manages user authentication, and the application uses the authenticated user information to manage conversations.
-
-### Step 2: WebSocket Connection
-
-Each browser establishes a WebSocket connection with the Node.js signaling server.
-
-The server authenticates the connection and allows users to join their conversation room.
-
-### Step 3: Peer Discovery
-
-When both users join the same conversation room, the signaling server notifies them about the other participant.
-
-### Step 4: Offer Creation
-
-One peer creates an `RTCPeerConnection` and generates an SDP offer.
-
-The offer describes the connection parameters supported by that peer.
-
-### Step 5: Offer and Answer Exchange
-
-The offer is sent through the WebSocket signaling server to the other peer.
-
-The receiving peer processes the offer and generates an SDP answer.
-
-The answer is forwarded back through the signaling server.
-
-### Step 6: ICE Candidate Exchange
-
-Both peers gather ICE candidates.
-
-These candidates are exchanged through WebSocket signaling so the browsers can discover a suitable network path.
-
-The project uses public STUN servers for ICE discovery.
-
-### Step 7: WebRTC Connection Established
-
-Once negotiation succeeds, the browsers establish a peer-to-peer connection.
-
-The RTCDataChannel becomes available for exchanging messages.
-
-### Step 8: Direct Message Exchange
-
-Users can now exchange text messages.
-
-The messages are transmitted through the WebRTC DataChannel instead of being routed through the WebSocket signaling server.
-
----
-
-## Project Structure
-
-```text
-Peerly/
-│
-├── client/
-│   ├── public/
-│   │
-│   ├── src/
-│   │   ├── app/
-│   │   │   ├── api/
-│   │   │   ├── auth/
-│   │   │   ├── dashboard/
-│   │   │   ├── globals.css
-│   │   │   ├── layout.tsx
-│   │   │   └── page.jsx
-│   │   │
-│   │   ├── components/
-│   │   │   ├── sidebar/
-│   │   │   ├── webrtc/
-│   │   │   ├── AuthLayout.tsx
-│   │   │   ├── ChatArea.tsx
-│   │   │   ├── ChatModal.tsx
-│   │   │   └── Sidebar.tsx
-│   │   │
-│   │   ├── context/
-│   │   ├── hooks/
-│   │   ├── lib/
-│   │   │   ├── supabase/
-│   │   │   └── webrtc/
-│   │   │       ├── dataChannel.ts
-│   │   │       ├── logger.ts
-│   │   │       ├── peerConnection.ts
-│   │   │       ├── signalingClient.ts
-│   │   │       └── useWebRTC.ts
-│   │   │
-│   │   └── types/
-│   │
-│   ├── supabase/
-│   │   └── migrations/
-│   │
-│   ├── package.json
-│   └── README.md
-│
-├── server/
-│   ├── src/
-│   │   ├── api/
-│   │   │   ├── auth/
-│   │   │   ├── conversations/
-│   │   │   ├── messages/
-│   │   │   ├── users/
-│   │   │   └── connection-requests/
-│   │   │
-│   │   ├── config/
-│   │   ├── services/
-│   │   ├── utils/
-│   │   ├── ws/
-│   │   │   └── signaling.js
-│   │   │
-│   │   └── server.js
-│   │
-│   └── package.json
-│
-├── ERRORS_AND_FIXES.md
-└── README.md
-```
-
-### Important Files
-
-| File | Responsibility |
+| Type | Purpose |
 |---|---|
-| `peerConnection.ts` | Creates and manages RTCPeerConnection instances |
-| `dataChannel.ts` | Handles RTCDataChannel messaging |
-| `signalingClient.ts` | Manages the frontend WebSocket signaling connection |
-| `useWebRTC.ts` | React hook for WebRTC connection and messaging |
-| `ConnectionStatus.tsx` | Displays connection status |
-| `signaling.js` | Handles signaling messages and conversation rooms |
-| `server.js` | Starts the Node.js HTTP and WebSocket server |
-| `ChatArea.tsx` | Chat interface and message handling |
+| `AUTH` | Authenticate the WebSocket connection using a Supabase access token. |
+| `PING` | Request a heartbeat response. |
+| `JOIN_ROOM` | Join a conversation after server-side membership verification. |
+| `LEAVE_ROOM` | Leave a conversation room. |
+| `OFFER` | Forward a WebRTC session description to the other participant. |
+| `ANSWER` | Forward the answer session description. |
+| `ICE_CANDIDATE` | Forward a trickled ICE candidate. |
 
----
+Server events include `AUTHENTICATED`, `ROOM_JOINED`, `PEER_JOINED`, `PEER_LEFT`, `PEER_RECONNECTED`, `OFFER`, `ANSWER`, `ICE_CANDIDATE`, `PONG`, and `ERROR`.
 
-## Prerequisites
+The signaling implementation also includes payload-size validation, JSON/payload validation, authentication checks, duplicate-signal suppression, a two-participant room limit, serialized per-socket message handling, and ping/pong heartbeat handling.
 
-Install the following before running Peerly:
+## HTTP API
 
-- Node.js (LTS recommended).
-- npm.
-- Git.
-- A Supabase account and project.
-- A modern browser with WebRTC support.
+The backend routes are registered in `server/src/server.js`.
 
----
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/auth/signup` | Create an account. |
+| `POST` | `/api/auth/signin` | Sign in using the supported email/username flow. |
+| `POST` | `/api/auth/logout` | Sign out and clear authentication cookies. |
+| `GET` | `/api/conversations` | Retrieve the authenticated user's conversations. |
+| `POST` | `/api/conversations` | Create or retrieve a direct conversation. |
+| `GET`, `POST`, `PATCH` | `/api/connection-requests` | Read and manage connection requests, according to the route handler. |
+| `GET` | `/api/connection-request-history` | Retrieve connection-request history. |
+| `GET`, `POST` | `/api/messages` | Retrieve and persist conversation messages, according to the route handler. |
+| `GET` | `/api/users` | Retrieve user information. |
+| `GET` | `/api/ice-config` | Return configured STUN servers and, when available, Twilio TURN credentials. |
 
-## Installation and Setup
+All protected routes use the backend authentication middleware. The exact accepted request bodies and query parameters are defined in the corresponding route files under `server/src/api/`.
 
-### 1. Clone the Repository
+## Database and Supabase
 
-```bash
-git clone <YOUR_REPOSITORY_URL>
+The SQL migrations are located in `client/supabase/migrations/`.
+
+They define or update the application's user/profile data, conversations, conversation participants, messages, connection requests, helper functions, policies, and Realtime publication membership.
+
+The schema uses Supabase Auth user IDs and RLS policies to restrict access. The chat schema migration includes helper functions used for tasks such as checking conversation membership, creating/retrieving a direct conversation, and resolving a username to an email address for the backend sign-in flow. A public-safe user profile view is used to avoid exposing email addresses in profile lookups.
+
+### Apply the migrations
+
+Apply the migration files to the Supabase project in filename order:
+
+1. `20240101_create_profiles_table.sql`
+2. `20240102_drop_profiles_use_users.sql`
+3. `20240103_chat_schema_policies.sql`
+4. `20240104_delete_conversation_policy.sql`
+5. `20240105_add_presence_columns.sql`
+
+Use the Supabase SQL Editor or your established migration workflow. Review the SQL and confirm the target project before applying it.
+
+**Important verification note:** the repository's `ERRORS_AND_FIXES.md` records that the RPC functions from `20240103_chat_schema_policies.sql` were not present in the connected Supabase project at the time that note was written. Verify that this migration has actually been applied before relying on conversation creation and username resolution. The presence migration adds database presence columns; the current client presence implementation should be checked in `client/src/hooks/useOnlineStatus.ts` and the dashboard context before assuming that database columns are the sole source of live presence.
+
+## Environment variables
+
+The following names are read by the supplied source. Set values in your local environment and deployment provider; do not commit real credentials.
+
+### Frontend — `client/.env.local`
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+NEXT_PUBLIC_SERVER_URL=http://localhost:5000
+
+# Optional client-side STUN entries; the current ICE fetch path
+# obtains its effective server list from the backend /api/ice-config endpoint.
+NEXT_PUBLIC_STUN_URL_1=stun:YOUR_STUN_SERVER
 ```
 
-Navigate into the project directory:
+The frontend reads:
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SERVER_URL`
+- `NEXT_PUBLIC_STUN_URL_1` through `NEXT_PUBLIC_STUN_URL_5` in the ICE helper
 
-```bash
-cd Peerly
-```
-
-### 2. Install Backend Dependencies
-
-```bash
-cd server
-npm install
-```
-
-### 3. Install Frontend Dependencies
-
-Open another terminal:
-
-```bash
-cd client
-npm install
-```
-
----
-
-## Environment Variables
-
-Peerly requires environment variables for Supabase configuration and communication between the frontend and backend.
-
-Create a `.env` file inside the `server` directory.
-
-### Server Environment Variables
+### Backend — `server/.env`
 
 ```env
 PORT=5000
 NODE_ENV=development
 
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
 
 CLIENT_URL=http://localhost:3000
 SERVER_URL=http://localhost:5000
+
+# Used by the ICE configuration route
+TWILIO_ACCOUNT_SID=YOUR_TWILIO_ACCOUNT_SID
+TWILIO_AUTH_TOKEN=YOUR_TWILIO_AUTH_TOKEN
+
+# Optional STUN entries read by the backend ICE configuration route
+NEXT_PUBLIC_STUN_URL_1=stun:YOUR_STUN_SERVER
+
+# Optional comma-separated WebSocket origin allowlist
+ALLOWED_ORIGINS=http://localhost:3000
 ```
 
-Create a `.env.local` file inside the `client` directory.
+Backend configuration requires `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CLIENT_URL`, and `SERVER_URL` at startup. `PORT` defaults to `5000`, and `NODE_ENV` defaults to `development`.
 
-### Client Environment Variables
+**TURN configuration detail:** the current `/api/ice-config` handler returns an HTTP 500 when `TWILIO_ACCOUNT_SID` or `TWILIO_AUTH_TOKEN` is absent. If both are present but Twilio token creation fails, the handler catches that failure and can still return the configured STUN entries. Configure and test this route before expecting TURN relay connectivity.
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+## Local development
 
-NEXT_PUBLIC_SERVER_URL=http://localhost:5000
+### Requirements
+
+- Node.js version compatible with the installed Next.js version.
+- npm.
+- A Supabase project with the required migrations applied.
+- Twilio credentials if you want the current ICE configuration endpoint to return successfully and issue TURN credentials.
+
+### 1. Clone the repository
+
+```bash
+git clone YOUR_REPOSITORY_URL
+cd crypto-pearly-chat
 ```
 
-Replace the placeholder values with the credentials from your Supabase project.
+Use the actual repository URL and directory name for your clone.
 
-**Security notes:**
-
-- Never commit `.env` or `.env.local` files.
-- Do not expose Supabase service-role keys in frontend code.
-- The Supabase anonymous/publishable key is intended for client-side use with appropriate Row Level Security policies.
-- Keep private credentials on the backend.
-
----
-
-## Database Setup
-
-Peerly uses Supabase PostgreSQL for application data.
-
-The database migration files are located at:
-
-```text
-client/supabase/migrations/
-```
-
-Apply the SQL migrations in chronological order using the Supabase SQL Editor.
-
-The migrations cover:
-
-- User and profile-related database setup.
-- Conversation and participant tables.
-- Database access policies.
-- Presence-related columns.
-- Conversation deletion policies.
-
-### Important Migration
-
-The migration:
-
-```text
-20240103_chat_schema_policies.sql
-```
-
-must be applied before fully verifying authenticated conversation operations.
-
-It creates the database functions used by the application, including:
-
-- `resolve_email_by_username`
-- `get_or_create_direct_conversation`
-- `is_conversation_participant`
-
-To apply it:
-
-1. Open your Supabase Dashboard.
-2. Select your project.
-3. Navigate to SQL Editor.
-4. Open `20240103_chat_schema_policies.sql`.
-5. Copy its contents into the SQL Editor.
-6. Execute the SQL.
-
-Ensure that the migration executes successfully before testing conversation creation and authenticated chat flows.
-
----
-
-## Running the Application
-
-Peerly consists of two independently running applications:
-
-1. Node.js backend server.
-2. Next.js frontend application.
-
-Both must be running for the complete application to work.
-
-### 1. Start the Backend Server
-
-Open a terminal:
+### 2. Configure the backend
 
 ```bash
 cd server
-node src/server.js
+npm install
 ```
 
-The server starts on:
+Create `server/.env` using the backend variables above, then start the server:
 
-```text
-http://localhost:5000
+```bash
+npm run dev
 ```
 
-It provides HTTP API endpoints and the WebSocket signaling service.
+The backend listens on `0.0.0.0` and defaults to port `5000`.
 
-### 2. Start the Frontend
+### 3. Configure the frontend
 
-Open another terminal:
+In a second terminal:
+
+```bash
+cd client
+npm install
+```
+
+Create `client/.env.local` using the frontend variables above, then run:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`.
+
+### 4. Verify the application
+
+Test the complete flow with two separate browser sessions or devices:
+
+1. Register or sign in as two different users.
+2. Create or accept a connection and open the direct conversation.
+3. Confirm both users join the same signaling room.
+4. Confirm the WebRTC peer connection reaches `connected` and the data channel opens.
+5. Exchange messages in both directions and verify delivery acknowledgements.
+6. Refresh the conversation and verify that persisted messages load.
+7. Test reconnection and ICE restart behavior on different networks.
+
+## Useful commands
+
+### Frontend
 
 ```bash
 cd client
 npm run dev
+npm run build
+npm run start
+npm run lint
+
+# Run the configured Vitest suite
+npx vitest run
 ```
 
-The frontend starts on:
+### Backend
+
+```bash
+cd server
+npm run dev
+npm start
+npm run build
+npm test
+```
+
+The backend `build` script is intentionally a no-op because the backend is plain JavaScript/ESM with no compilation step.
+
+## Project structure
 
 ```text
-http://localhost:3000
+crypto-pearly-chat/
+├── README.md
+├── ERRORS_AND_FIXES.md
+├── client/
+│   ├── package.json
+│   ├── next.config.ts
+│   ├── src/
+│   │   ├── app/                  # App Router pages and auth routes
+│   │   ├── components/           # Chat, sidebar, notifications, UI
+│   │   ├── context/              # Auth, dashboard, notification state
+│   │   ├── hooks/                # Conversations, requests, presence/realtime
+│   │   ├── lib/
+│   │   │   ├── supabase/         # Supabase client/context
+│   │   │   └── webrtc/           # Peer connection, signaling, data channel
+│   │   └── types/
+│   ├── supabase/
+│   │   └── migrations/
+│   └── tests/
+└── server/
+    ├── package.json
+    ├── src/
+    │   ├── server.js             # HTTP server and route registration
+    │   ├── api/                  # HTTP API route handlers
+    │   ├── config/               # Environment and Supabase clients
+    │   ├── services/             # Chat and connection-request services
+    │   ├── utils/                # Auth, CORS, cookies, validation, rate limits
+    │   └── ws/
+    │       └── signaling.ts      # WebSocket signaling and room management
+    └── tests/
 ```
 
-Open the application in your browser:
+## Deployment considerations
 
-```text
-http://localhost:3000
-```
+- Deploy the Next.js application and Node.js backend as separate services.
+- Set `NEXT_PUBLIC_SERVER_URL` in the frontend to the deployed backend's HTTPS origin. The client uses that base URL for HTTP API calls; the signaling client derives the WebSocket URL from it.
+- Set backend `CLIENT_URL` to the deployed frontend origin and configure `ALLOWED_ORIGINS` as appropriate for the production frontend origin(s).
+- Configure the Supabase project URL and anon key on both frontend and backend using the correct variable names for each runtime.
+- Add the frontend's authentication callback URL to the Supabase Auth redirect URL allowlist.
+- Configure Twilio credentials and verify that `/api/ice-config` returns usable ICE server configuration.
+- Use HTTPS/WSS in production.
+- Keep the signaling backend on a **single instance** unless room state is moved to a shared system. Signaling rooms and socket maps are currently held in process memory; separate backend replicas will not share room membership or signaling messages. A shared pub/sub or signaling adapter (for example, Redis) is needed before horizontal scaling.
+- Test TURN connectivity across restrictive NATs, mobile networks, and corporate firewalls. STUN-only connectivity is not guaranteed to work for every pair of networks.
+
+## Security and operational notes
+
+- WebSocket authentication accepts a bearer token in the Authorization header or the `access_token` cookie; the signaling server explicitly avoids accepting tokens in URL query parameters.
+- Room joins are checked against conversation membership on the backend.
+- HTTP state-changing requests include origin/CSRF checks, and the backend has shared request utilities for authentication, cookie handling, rate limiting, and response formatting.
+- Supabase RLS policies are an important part of the data-access boundary; apply and validate the migrations rather than relying only on UI restrictions.
+- Do not expose service-role keys, Twilio auth tokens, or other server secrets in frontend variables or source control.
+- The in-memory signaling room design is single-process state, not a horizontally scaled messaging fabric.
+
+## Tests
+
+The repository includes:
+- Frontend authentication tests in `client/tests/`.
+- Backend authentication tests in `server/tests/auth.test.js`.
+- Backend API tests in `server/tests/backend.test.js`.
+- WebSocket signaling tests in `server/tests/websocket.test.js`.
+
+Run the relevant test commands from each package directory. A passing unit/integration suite does not by itself prove successful peer connectivity across real-world NAT/firewall combinations; test with two independent clients and networks.
+
+## Known limitations and items to verify
+
+- **Single-instance signaling:** room membership and WebSocket routing are stored in in-memory `Map`/`Set` structures. Multi-instance deployment requires shared coordination.
+- **Supabase migration state:** verify that the chat schema/RPC migration is applied to the target Supabase project. The repository's error/fix notes explicitly call this out as a required verification.
+- **TURN endpoint configuration:** the current ICE endpoint requires Twilio credentials to be configured before it returns successfully.
+- **Best-effort persistence:** the message is sent over the data channel first; persistence is attempted after acknowledgement. A persistence failure does not undo a message already delivered to the peer.
+- **Data-channel scope:** the supplied data-channel implementation handles text payloads and acknowledgements. Do not assume file, image, or voice-message transfer from this implementation.
+- **Presence source:** the codebase contains both database presence columns/migration and client Realtime presence logic. Verify the runtime behavior and migration state in the target Supabase project.
+- **Feature scope:** no map or weather implementation was found in the supplied repository snapshot.
 
 ---
 
-## Testing the Application
-
-To verify the basic peer-to-peer chat functionality, follow these steps.
-
-### Step 1: Open Two Browser Sessions
-
-Open Peerly in two separate browser sessions.
-
-For example:
-
-- Browser 1: Google Chrome.
-- Browser 2: Microsoft Edge.
-
-Alternatively, use a normal browser window and an incognito window with two different authenticated accounts.
-
-### Step 2: Sign In
-
-Sign in using two different Peerly accounts.
-
-### Step 3: Create a Conversation
-
-Create or open a direct conversation between the two users.
-
-### Step 4: Establish the WebRTC Connection
-
-Both users should join the same conversation.
-
-The application uses the WebSocket signaling server to exchange:
-
-- `OFFER`
-- `ANSWER`
-- `ICE_CANDIDATE`
-
-The browsers then attempt to establish a direct WebRTC connection.
-
-### Step 5: Verify Connection Status
-
-Check the connection status displayed in the chat interface.
-
-The status should eventually indicate:
-
-```text
-Connected
-```
-
-### Step 6: Send a Message
-
-Send a text message from Browser 1.
-
-Verify that the message appears in Browser 2.
-
-Then send a reply from Browser 2 and verify that Browser 1 receives it.
-
-### Step 7: Test Disconnection
-
-Close one browser session or disconnect one peer.
-
-Verify that the other user's interface reflects the connection-state change.
-
-### Expected Result
-
-Two authenticated users should be able to establish a WebRTC connection and exchange text messages through the RTCDataChannel.
-
----
-
-## Connection Status
-
-Peerly displays connection states to help users understand the current communication status.
-
-| Status | Meaning |
-|---|---|
-| Connecting | Establishing the connection |
-| Waiting for peer | Waiting for the other participant |
-| Negotiating | Exchanging WebRTC connection information |
-| Connected | Peer-to-peer communication established |
-| Disconnected | Connection has been interrupted |
-| Reconnecting | Connection recovery is in progress |
-| Failed | Connection could not be established |
-
-The connection state is determined using WebRTC connection information and DataChannel readiness.
-
----
-
-## WebRTC Implementation Details
-
-### RTCPeerConnection
-
-The `RTCPeerConnection` API manages the peer-to-peer connection.
-
-It handles:
-
-- SDP offer and answer negotiation.
-- ICE candidate gathering.
-- ICE connection state.
-- DataChannel establishment.
-
-Implementation:
-
-```text
-client/src/lib/webrtc/peerConnection.ts
-```
-
-### RTCDataChannel
-
-The RTCDataChannel provides a direct communication channel between the browsers.
-
-Peerly uses it to exchange chat messages.
-
-Implementation:
-
-```text
-client/src/lib/webrtc/dataChannel.ts
-```
-
-### WebSocket Signaling
-
-The signaling server exchanges connection negotiation information between peers.
-
-Supported signaling message types include:
-
-- `AUTH`
-- `JOIN_ROOM`
-- `LEAVE_ROOM`
-- `OFFER`
-- `ANSWER`
-- `ICE_CANDIDATE`
-- `PEER_JOINED`
-- `PEER_LEFT`
-
-Implementation:
-
-```text
-client/src/lib/webrtc/signalingClient.ts
-server/src/ws/signaling.js
-```
-
-### STUN Servers
-
-Peerly uses public STUN servers to help browsers discover their public-facing network addresses.
-
-The current default configuration includes:
-
-```text
-stun.l.google.com:19302
-stun1.l.google.com:19302
-```
-
-STUN assists with establishing connections between peers behind NAT.
-
-For reliable communication across restrictive networks, a TURN server may also be required.
-
-### Perfect Negotiation
-
-Peerly implements the WebRTC Perfect Negotiation pattern.
-
-This helps handle simultaneous negotiation attempts by assigning polite and impolite roles to peers.
-
-It also handles offer collisions and ICE candidate queuing.
-
----
-
-## Current Limitations
-
-The current implementation focuses on one-to-one text communication.
-
-The following limitations should be noted:
-
-1. **Two participants per conversation:** The signaling server currently limits a room to two participants.
-2. **File transfer:** File transfer through the RTCDataChannel is not currently implemented.
-3. **Group chat:** Multi-participant WebRTC group communication is not currently implemented.
-4. **TURN server:** The current ICE configuration uses STUN servers. A TURN server is not configured.
-5. **Network reliability:** Peer-to-peer connectivity may fail on restrictive networks, symmetric NATs, or certain cellular connections.
-6. **Database setup:** The required Supabase migration must be applied before all authenticated conversation operations can be fully verified.
-
----
-
-## Troubleshooting
-
-### 1. WebSocket Connection Failed
-
-Check that the Node.js backend is running.
-
-Verify:
-
-```env
-NEXT_PUBLIC_SERVER_URL=http://localhost:5000
-```
-
-Also verify that the backend's `CLIENT_URL` matches the frontend URL.
-
-### 2. WebRTC Connection Not Established
-
-Check:
-
-- Both users are signed in.
-- Both users are in the same conversation.
-- The WebSocket signaling connection is active.
-- Offers and answers are exchanged successfully.
-- ICE candidates are being received.
-
-Try testing with two browsers on the same network first.
-
-### 3. Messages Are Not Being Received
-
-Check:
-
-- Whether the WebRTC connection is established.
-- Whether the RTCDataChannel is open.
-- Whether the message handler is receiving incoming messages.
-- Whether browser console errors are present.
-
-### 4. Conversation Creation Fails
-
-Verify that the required Supabase database migrations have been applied.
-
-In particular, check the RPC functions created by:
-
-```text
-20240103_chat_schema_policies.sql
-```
-
-### 5. Connection Fails Across Different Networks
-
-STUN alone may not establish a connection through every network configuration.
-
-A TURN server may be needed to relay WebRTC traffic when direct connectivity is unavailable.
-
----
-
-## Future Improvements
-
-Potential improvements include:
-
-- Implement file transfer through RTCDataChannel.
-- Add group chat support.
-- Configure a TURN server for improved connectivity.
-- Improve automatic reconnection and recovery.
-- Add additional WebRTC connection diagnostics.
-- Improve message delivery and synchronization.
-- Add support for larger file transfers using chunking.
-- Add end-to-end encryption enhancements where appropriate.
-
----
-
-## Conclusion
-
-Peerly demonstrates the implementation of real-time peer-to-peer communication using WebRTC.
-
-The project uses a Node.js WebSocket signaling server to exchange SDP offers, answers, and ICE candidates. Once the connection is established, users exchange text messages directly through the WebRTC DataChannel.
-
-The application also integrates Supabase for authentication, database persistence, and online presence.
-
-The implementation demonstrates the fundamental concepts of WebRTC-based peer-to-peer communication, signaling, ICE negotiation, and real-time messaging.
-
----
-
-**Project:** Peerly  
-**Category:** Peer-to-Peer Chat Application  
-**Primary Communication Technology:** WebRTC  
-**Signaling Technology:** WebSocket  
-**Backend:** Node.js  
-**Frontend:** Next.js and React  
-**Database and Authentication:** Supabase
+Peerly is designed as a learning and demonstration project for direct browser-to-browser communication, WebRTC negotiation, WebSocket signaling, and real-time application state.
