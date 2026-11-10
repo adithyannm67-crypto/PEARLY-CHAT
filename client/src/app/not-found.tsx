@@ -17,12 +17,12 @@ export default function NotFound() {
         The page you&apos;re looking for doesn&apos;t exist.
       </p>
 
-      <Link
-        href="/dashboard"
-        className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-      >
-        Go to dashboard
-      </Link>
+  <Link
+    href="/auth/login"
+    className="rounded-lg bg-primary px-6 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+  >
+    Go to login
+  </Link>
     </div>
   );
 }
