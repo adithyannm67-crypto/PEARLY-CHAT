@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSupabase } from '@/context/AuthProvider';
+import { useNotifications } from '@/context/NotificationContext';
 import { authFetch } from '@/lib/authFetch';
 import type { ChatUser, ConnectionRequest, Conversation } from '@/types/chat';
 import { useConversations } from '@/hooks/useConversations';
@@ -117,6 +118,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const router = useRouter();
   const { session, loading: authLoading, signOut, supabase } = useSupabase();
+  const { addNotification } = useNotifications();
   const userId = session?.user?.id ?? null;
 
   const {
@@ -226,6 +228,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   };
 
   const handleLogout = async () => {
+    addNotification({ type: 'info', title: 'Signing out...', duration: 2000 });
     disconnectWebRTC();
 
     // Close the shared signaling WebSocket on logout.

@@ -92,12 +92,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [supabase]);
 
   const signIn = async (email: string, password: string) => {
+    addNotification({
+      type: 'info',
+      title: 'Signing in...',
+      message: 'Attempting to sign in...',
+      persistent: false,
+    });
     const { error, data } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       addNotification({
         type: 'error',
         title: 'Sign-in failed',
         message: error.message.includes('Invalid login') ? 'Invalid email or password.' : 'Unable to sign in. Please try again.',
+        persistent: false,
+      });
+    } else {
+      addNotification({
+        type: 'success',
+        title: 'Signed in successfully',
+        message: 'You are now logged in.',
         persistent: false,
       });
     }
@@ -122,6 +135,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
+    addNotification({
+      type: 'info',
+      title: 'Signing out...',
+      message: 'Attempting to sign out...',
+      persistent: false,
+    });
     const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL
 
     if(!serverUrl) {

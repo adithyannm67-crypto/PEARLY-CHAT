@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthLayout from "../../../components/AuthLayout";
 import { useSupabase } from "../../../context/AuthProvider";
+import { useNotifications } from "../../../context/NotificationContext";
 import {
   User,
   Lock,
@@ -16,6 +17,7 @@ import {
 export default function LoginPage() {
   const router = useRouter();
   const { supabase } = useSupabase();
+  const { addNotification } = useNotifications();
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -37,6 +39,7 @@ export default function LoginPage() {
 
     setError("");
     setIsLoading(true);
+    addNotification({ type: 'info', title: 'Signing in...', duration: 2000 });
 
     try {
       const response = await fetch(`${SERVER_URL}/api/auth/signin`, {
